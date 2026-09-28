@@ -1,0 +1,46 @@
+{
+  "expo": {
+    "name": "AccessEvent",
+    "slug": "access-event",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "light",
+    "scheme": "accessevent",
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.accessevent.app",
+      "infoPlist": {
+        "NSLocationWhenInUseUsageDescription": "O AccessEvent usa sua localização para registrar os caminhos percorridos no local e para posicionar você no mapa do evento."
+      }
+    },
+    "android": {
+      "package": "com.accessevent.app",
+      "adaptiveIcon": {
+        "backgroundColor": "#E6F4FE",
+        "foregroundImage": "./assets/android-icon-foreground.png",
+        "backgroundImage": "./assets/android-icon-background.png",
+        "monochromeImage": "./assets/android-icon-monochrome.png"
+      },
+      "predictiveBackGestureEnabled": false,
+      "permissions": ["ACCESS_COARSE_LOCATION", "ACCESS_FINE_LOCATION"]
+    },
+    "web": {
+      "favicon": "./assets/favicon.png"
+    },
+    "plugins": [
+      [
+        "expo-location",
+        {
+          "locationWhenInUsePermission": "O AccessEvent usa sua localização para registrar os caminhos percorridos no local e para posicionar você no mapa do evento."
+        }
+      ],
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "O AccessEvent usa a câmera para ler os QR Codes que identificam pontos do mapa do evento."
+        }
+      ]
+    ]
+  }
+}
