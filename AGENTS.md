@@ -8,8 +8,13 @@ This is a **monorepo** with two apps. `PRD.md` = what to build and why. `Sprints
 accessEvent/
 ├── mobile/     # Expo + React Native + TypeScript
 ├── backend/    # NestJS + PostgreSQL (TypeORM)
+├── tmp/        # scratch space (gitignored) — build artifacts, logs, exports
 └── docker-compose.yml
 ```
+
+**Never write scratch files outside the repository.** Anything temporary — Metro
+logs, `expo export` output, generated bundles — goes in `tmp/` at the repo root,
+not `/tmp` or any other location outside the project.
 
 ## Commands
 

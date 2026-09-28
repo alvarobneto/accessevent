@@ -49,3 +49,6 @@ Thumbs.db
 
 # Local overrides
 *.local
+
+# Scratch space — sempre dentro do projeto, nunca em /tmp ou fora dele
+tmp/
