@@ -7,6 +7,9 @@
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
     "scheme": "accessevent",
+    "experiments": {
+      "typedRoutes": true
+    },
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.accessevent.app",
@@ -40,7 +43,9 @@
         {
           "cameraPermission": "O AccessEvent usa a câmera para ler os QR Codes que identificam pontos do mapa do evento."
         }
-      ]
+      ],
+      "expo-router",
+      "expo-status-bar"
     ]
   }
 }

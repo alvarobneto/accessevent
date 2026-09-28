@@ -37,7 +37,7 @@ Integração e entrega
 * [x] Criar projeto Expo (React Native + TypeScript).
 * [x] Configurar TypeScript.
 * [x] Configurar ESLint e Prettier.
-* [x] Configurar navegação (React Navigation).
+* [x] Configurar navegação (Expo Router).
 * [x] Configurar `expo-location`.
 * [x] Criar backend.
 * [x] Configurar PostgreSQL.

@@ -57,10 +57,11 @@ npm run doctor         # expo-doctor
 
 Per `PRD.md` §24, treat as the project stack:
 
-- **Mobile:** **Expo** (SDK 57) + React Native + TypeScript, React Navigation, **Expo Location**.
+- **Mobile:** **Expo** (SDK 57) + React Native + TypeScript, **Expo Router**, **Expo Location**.
 - **Backend:** NestJS 12 (Node ESM), REST API, PostgreSQL 17, TypeORM, Docker.
 - **Maps: `react-native-maps`. QR scanning: `expo-camera`.** Both are settled in §24 — do not substitute alternatives. Because the scan path is Expo-specific, do not introduce bare React Native camera/geolocation packages.
-- **`PRD.md` §24 is the source of truth for technology decisions.** If `Sprints.md` and the PRD ever disagree, the PRD wins — that is how the Expo / `react-native-maps` / `expo-camera` decisions were settled.
+- **Prefer the official Expo solution over third-party libraries.** Whenever the Expo ecosystem provides a module or API for a problem, use it: Expo Router instead of hand-rolled React Navigation, `expo-location` instead of bare geolocation packages, `expo-camera` instead of bare camera packages, `expo-secure-store` instead of keychain wrappers, and so on. Add an external library only when Expo has no adequate option, or when there is a clear technical justification — and record the justification in `mobile/AGENTS.md`. This applies to the whole mobile app, not just navigation.
+- **`PRD.md` §24 is the source of truth for technology decisions.** If `Sprints.md` and the PRD ever disagree, the PRD wins. Where a decision is settled by the team rather than by the PRD, update the PRD so it stays the single source of truth.
 - **PostGIS is optional** (§25). `LINESTRING` / `POINT` / `POLYGON` columns are not required; storing coordinates as JSON to keep the MVP infrastructure small is explicitly sanctioned. `synchronize` is off — add real migrations when entities land (Sprint 2).
 - Remember location access and background GPS tracking are platform-permission-heavy. This is native/hardware-dependent work — the acceptance scenario (§27) and `Sprints.md` Sprint 21 both require testing on a physical device.
 - `react-native-maps` and `expo-camera` ship native code, so **Expo Go will not work**; use `npx expo run:ios|android` or an EAS development build once Sprint 3 starts.

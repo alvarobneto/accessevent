@@ -857,10 +857,18 @@ createdAt
 * React Native
 * TypeScript
 * Expo
-* React Navigation
+* Expo Router
 * Expo Location
 * Biblioteca de mapas compatível com React Native - react-native-maps
 * Biblioteca de QR Code Scanner - expo-camera
+
+**Princípio de escolha:** sempre que o ecossistema Expo oferecer um módulo ou
+API para um problema, ele tem prioridade sobre bibliotecas externas. Exemplos:
+Expo Router no lugar de navegação montada à mão, `expo-location` no lugar de
+pacotes de geolocalização puros, `expo-camera` no lugar de pacotes de câmera.
+Somente recorrer a bibliotecas externas quando o ecossistema Expo não tiver uma
+solução adequada, ou quando houver uma justificativa técnica registrada no
+`mobile/AGENTS.md`.
 
 ## Backend
 

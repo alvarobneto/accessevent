@@ -35,7 +35,7 @@ function formatCoordinates(position: Coordinates | null): string {
   return `${latitude.toFixed(6)}, ${longitude.toFixed(6)}${accuracyText}`;
 }
 
-export function SetupScreen() {
+export default function SetupScreen() {
   const { state, check } = useHealthCheck();
   const [location, setLocation] = useState<LocationProviderState | null>(null);
   const [position, setPosition] = useState<Coordinates | null>(null);
