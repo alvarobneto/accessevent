@@ -12,9 +12,11 @@ accessEvent/
 └── docker-compose.yml
 ```
 
-**Never write scratch files outside the repository.** Anything temporary — Metro
-logs, `expo export` output, generated bundles — goes in `tmp/` at the repo root,
-not `/tmp` or any other location outside the project.
+### Temporary Files & Workspace Boundary (STRICT)
+
+- **NEVER access, create, read, write, or execute commands in external directories outside the project workspace.**
+- Specifically prohibited: `/tmp`, `/tmp/*`, `/Users/antoniomarcelo/Documents/www/personal/tmp/*`, or any path outside `/Users/antoniomarcelo/Documents/www/personal/AccessEvent`.
+- **Scratch / Temporary space ("lixo")**: Always use the existing `tmp/` folder at the root of the project (`accessEvent/tmp/`), or create a temporary directory strictly inside the project workspace. Anything temporary (build logs, Metro logs, exports, bundles, scratch scripts) belongs exclusively inside the project's internal `tmp/`.
 
 ## Commands
 

@@ -48,38 +48,58 @@ Integração e entrega
 
 ### Sprint 1 — Navegação básica
 
-Criar a estrutura de telas:
+A tela inicial escolhe o modo de uso e leva para uma das duas áreas, sem login e
+sem servidor. Os dados ficam apenas em memória, atrás de uma interface de
+repositório que depois será trocada por persistência local ou pela API.
 
 ```text
-Home
-├── Eventos
-├── Meus eventos
-└── Perfil
+Início ("Eu sou organizador" / "Eu sou usuário")
 
 Organizador
+├── Eventos (criar evento e abrir "Gerenciar evento")
 ├── Criar evento
-├── Meus eventos
-└── Editar mapa
+├── Gerenciar evento
+│   ├── Criar navegação
+│   └── Visualizar navegações (abrir o editor)
+└── Editar navegação (título)
 
-Participante
+Usuário
 ├── Eventos
-├── Mapa
-└── Rota
+├── Navegações do evento
+└── Mapa
 ```
 
-* [ ] Criar navegação.
-* [ ] Criar telas principais.
-* [ ] Criar componentes básicos.
-* [ ] Criar estados de loading/error.
+* [x] Criar navegação.
+* [x] Criar telas principais.
+* [x] Criar componentes básicos.
+* [x] Criar estados de loading/error.
+* [x] Isolar os dados em `src/data/` (`AppRepository` + implementação em memória).
+* [x] Remover autenticação, mocks e persistência do protótipo.
 
 ### Sprint 2 — Eventos
 
-* [ ] Criar evento.
-* [ ] Listar eventos.
-* [ ] Visualizar evento.
-* [ ] Editar evento.
-* [ ] Criar modelo `Event`.
-* [ ] Criar endpoints de eventos.
+* [x] Criar evento.
+* [x] Listar eventos.
+* [x] Visualizar evento.
+* [x] Editar evento.
+* [x] Criar modelo `Event`.
+* [x] Criar endpoints de eventos.
+
+**Entregue além da lista, e verificado:**
+
+- [x] Persistência real em PostgreSQL: `synchronize: false`, migração versionada e serviço
+      Docker `migrate` (`node dist/database/migrate.js run`) que roda antes da API.
+- [x] Migração e entidades conferidas contra o schema builder, sem divergência.
+- [x] `Map` para não quebrar a interface de navegações já existente: `GET`/`POST
+      /events/:eventId/maps` e `GET`/`PATCH /maps/:mapId`.
+- [x] Mobile consumindo a API por padrão (`EXPO_PUBLIC_DATA_SOURCE=api`), com o repositório em
+      memória atrás de `memory` para desenvolvimento offline.
+- [x] Formulário de criação e de edição compartilhado, com mensagem de erro do backend exibida
+      em pt-BR.
+- [x] Ids de caminho validados como UUID: id malformado responde 400 em vez de estourar 500 no
+      Postgres.
+- [x] Nome obrigatório rejeita string vazia **e** string só com espaços, na criação e no patch.
+- [x] 17 testes unitários + 26 e2e, lint e typecheck limpos nos dois apps.
 
 ### Resultado da fase
 
