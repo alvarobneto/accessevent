@@ -1,3 +1,22 @@
+# Variáveis compartilhadas pela API e pelo runner de migrações. Manter em um só
+# lugar evita que os dois serviços leiam bancos diferentes.
+x-api-environment: &api-environment
+  NODE_ENV: production
+  PORT: 3333
+  DATABASE_HOST: postgres
+  DATABASE_PORT: 5432
+  DATABASE_USERNAME: ${DATABASE_USERNAME:-accessevent}
+  DATABASE_PASSWORD: ${DATABASE_PASSWORD:-accessevent}
+  DATABASE_NAME: ${DATABASE_NAME:-accessevent}
+  DATABASE_SCHEMA: public
+  DATABASE_SSL: 'false'
+  DATABASE_LOGGING: 'false'
+  CORS_ORIGINS: ${CORS_ORIGINS:-*}
+
+x-api-build: &api-build
+  context: ./backend
+  dockerfile: Dockerfile
+
 services:
   postgres:
     image: postgres:17-alpine
@@ -18,27 +37,29 @@ services:
       retries: 10
       start_period: 10s
 
+  # `synchronize` do TypeORM é desligado, então o schema precisa das migrações.
+  # O runner é o JavaScript compilado porque a imagem de runtime remove as
+  # devDependencies — o CLI do TypeORM exigiria `ts-node`.
+  migrate:
+    build: *api-build
+    container_name: accessevent-migrate
+    restart: 'no'
+    command: ['node', 'dist/database/migrate.js', 'run']
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment: *api-environment
+
   api:
-    build:
-      context: ./backend
-      dockerfile: Dockerfile
+    build: *api-build
     container_name: accessevent-api
     restart: unless-stopped
     depends_on:
       postgres:
         condition: service_healthy
-    environment:
-      NODE_ENV: production
-      PORT: 3333
-      DATABASE_HOST: postgres
-      DATABASE_PORT: 5432
-      DATABASE_USERNAME: ${DATABASE_USERNAME:-accessevent}
-      DATABASE_PASSWORD: ${DATABASE_PASSWORD:-accessevent}
-      DATABASE_NAME: ${DATABASE_NAME:-accessevent}
-      DATABASE_SCHEMA: public
-      DATABASE_SSL: 'false'
-      DATABASE_LOGGING: 'false'
-      CORS_ORIGINS: ${CORS_ORIGINS:-*}
+      migrate:
+        condition: service_completed_successfully
+    environment: *api-environment
     ports:
       - '${PORT:-3333}:3333'
     healthcheck:

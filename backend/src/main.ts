@@ -1,7 +1,8 @@
-import { Logger, ValidationPipe } from '@nestjs/common';
+import { Logger } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
 
 import { AppModule } from './app.module.js';
+import { configureApp } from './app.setup.js';
 import { validateConfig } from './config/env.validation.js';
 
 async function bootstrap() {
@@ -9,19 +10,7 @@ async function bootstrap() {
 
   const app = await NestFactory.create(AppModule, { bufferLogs: false });
 
-  app.enableCors({
-    origin: config.corsOrigins.includes('*') ? true : config.corsOrigins,
-    methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-  });
-
-  app.useGlobalPipes(
-    new ValidationPipe({
-      whitelist: true,
-      forbidNonWhitelisted: true,
-      transform: true,
-      transformOptions: { enableImplicitConversion: true },
-    }),
-  );
+  configureApp(app, { corsOrigins: config.corsOrigins });
 
   app.enableShutdownHooks();
 

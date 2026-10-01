@@ -3,8 +3,14 @@ import { ConfigModule, ConfigService } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
 
 import { databaseConfig } from './config/database.config.js';
-import { validateConfig } from './config/env.validation.js';
+import {
+  validateConfig,
+  type DatabaseSettings,
+} from './config/env.validation.js';
+import { buildTypeOrmOptions } from './database/typeorm.options.js';
+import { EventsModule } from './events/events.module.js';
 import { HealthModule } from './health/health.module.js';
+import { MapsModule } from './maps/maps.module.js';
 
 @Module({
   imports: [
@@ -17,25 +23,12 @@ import { HealthModule } from './health/health.module.js';
     }),
     TypeOrmModule.forRootAsync({
       inject: [ConfigService],
-      useFactory: (config: ConfigService) => ({
-        type: 'postgres' as const,
-        host: config.getOrThrow<string>('database.host'),
-        port: config.getOrThrow<number>('database.port'),
-        username: config.getOrThrow<string>('database.username'),
-        password: config.getOrThrow<string>('database.password'),
-        database: config.getOrThrow<string>('database.name'),
-        schema: config.getOrThrow<string>('database.schema'),
-        ssl: config.get<boolean>('database.ssl')
-          ? { rejectUnauthorized: false }
-          : false,
-        logging: config.get<boolean>('database.logging'),
-        autoLoadEntities: true,
-        synchronize: false,
-        retryAttempts: 5,
-        retryDelay: 2000,
-      }),
+      useFactory: (config: ConfigService) =>
+        buildTypeOrmOptions(config.getOrThrow<DatabaseSettings>('database')),
     }),
     HealthModule,
+    EventsModule,
+    MapsModule,
   ],
 })
 export class AppModule {}
