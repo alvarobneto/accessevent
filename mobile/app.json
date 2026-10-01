@@ -19,6 +19,7 @@
     },
     "android": {
       "package": "com.accessevent.app",
+      "usesCleartextTraffic": true,
       "adaptiveIcon": {
         "backgroundColor": "#EFF6FF",
         "foregroundImage": "./assets/android-icon-foreground.png",
