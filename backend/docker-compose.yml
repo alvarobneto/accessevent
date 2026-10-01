@@ -1,0 +1,23 @@
+services:
+  postgres:
+    image: postgres:17-alpine
+    container_name: accessevent-postgres
+    env_file:
+      - .env
+    environment:
+      POSTGRES_USER: ${DATABASE_USERNAME:-accessevent}
+      POSTGRES_PASSWORD: ${DATABASE_PASSWORD:-accessevent}
+      POSTGRES_DB: ${DATABASE_NAME:-accessevent}
+    ports:
+      - '${DATABASE_PORT:-5432}:5432'
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U ${DATABASE_USERNAME:-accessevent} -d ${DATABASE_NAME:-accessevent}']
+      interval: 5s
+      timeout: 5s
+      retries: 5
+      start_period: 5s
+
+volumes:
+  postgres-data:
