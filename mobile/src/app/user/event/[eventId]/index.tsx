@@ -2,15 +2,20 @@ import { Stack, router, useLocalSearchParams } from 'expo-router';
 import { View } from 'react-native';
 
 import { AsyncContent } from '@/components/async-content';
-import { EventDetails } from '@/components/event-details';
+import { EventMenu } from '@/components/event-menu';
 import { Screen } from '@/components/screen';
 import { Section } from '@/components/section';
-import { Button, Card, EmptyState, Icon, ListRow, Text } from '@/components/ui';
+import { Button, EmptyState, Icon, ListRow, Text } from '@/components/ui';
 import { repository } from '@/data';
 import { useAsyncData } from '@/hooks/useAsyncData';
 import { colors } from '@/theme/tokens';
 
-/** Navegações de um evento, em modo de consulta. */
+/**
+ * Navegações de um evento, em modo de consulta.
+ *
+ * A tela é a lista; os dados do evento ficam em `/user/event/[eventId]/details`,
+ * atrás do menu de três pontinhos, pelo mesmo combinado do organizador.
+ */
 export default function UserEventScreen() {
   const { eventId } = useLocalSearchParams<{ eventId: string }>();
   const id = eventId ?? '';
@@ -22,7 +27,14 @@ export default function UserEventScreen() {
 
   return (
     <>
-      <Stack.Screen options={{ title: eventName ?? 'Evento' }} />
+      <Stack.Screen
+        options={{
+          title: eventName ?? 'Evento',
+          headerRight: () => (
+            <EventMenu eventId={id} eventName={eventName ?? undefined} mode="user" />
+          ),
+        }}
+      />
 
       <Screen scrollable testID="user-event-screen">
         <AsyncContent
@@ -33,10 +45,6 @@ export default function UserEventScreen() {
           {(data) =>
             data ? (
               <>
-                <Card>
-                  <EventDetails event={data} />
-                </Card>
-
                 <Section
                   title="Navegações"
                   description={

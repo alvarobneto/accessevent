@@ -2,7 +2,7 @@ import { Stack, router, useLocalSearchParams } from 'expo-router';
 import { View } from 'react-native';
 
 import { AsyncContent } from '@/components/async-content';
-import { EventDetails } from '@/components/event-details';
+import { EventMenu } from '@/components/event-menu';
 import { Screen } from '@/components/screen';
 import { Section } from '@/components/section';
 import { Button, Card, EmptyState, Icon, ListRow, Text } from '@/components/ui';
@@ -12,7 +12,13 @@ import { useRefreshOnFocus } from '@/hooks/useRefreshOnFocus';
 import { colors } from '@/theme/tokens';
 import { formatDate } from '@/utils/format';
 
-/** Gerenciar Evento: criar navegações e abrir o editor de cada uma. */
+/**
+ * Gerenciar Evento: criar navegações e abrir cada uma.
+ *
+ * O resumo do evento e o botão de editar saíram daqui para o menu de três
+ * pontinhos do cabeçalho: a tela é para gerenciar as navegações, e ler ou editar
+ * os dados do evento é uma ação pontual.
+ */
 export default function ManageEventScreen() {
   const { eventId } = useLocalSearchParams<{ eventId: string }>();
   const id = eventId ?? '';
@@ -29,7 +35,12 @@ export default function ManageEventScreen() {
 
   return (
     <>
-      <Stack.Screen options={{ title: eventName ?? 'Evento' }} />
+      <Stack.Screen
+        options={{
+          title: eventName ?? 'Evento',
+          headerRight: () => <EventMenu eventId={id} eventName={eventName ?? undefined} />,
+        }}
+      />
 
       <Screen scrollable testID="manage-event-screen">
         <AsyncContent
@@ -40,19 +51,6 @@ export default function ManageEventScreen() {
           {(data) =>
             data ? (
               <>
-                <Card>
-                  <EventDetails event={data} />
-
-                  <Button
-                    label="Editar dados do evento"
-                    variant="outline"
-                    size="md"
-                    iconStart={<Icon name="pencil-outline" size={20} color={colors.primary} />}
-                    onPress={() => router.push(`/organizer/event/${id}/edit`)}
-                    testID="open-edit-event"
-                  />
-                </Card>
-
                 <Card variant="highlight">
                   <View className="gap-1">
                     <Text variant="heading">Nova navegação</Text>
@@ -98,10 +96,10 @@ export default function ManageEventScreen() {
                             title={map.name}
                             meta={`Atualizada em ${formatDate(map.updatedAt)}`}
                             trailing={
-                              <Icon name="pencil-outline" size={20} color={colors.primary} />
+                              <Icon name="chevron-right" size={24} color={colors.gray300} />
                             }
-                            onPress={() => router.push(`/organizer/map/${map.id}`)}
-                            accessibilityLabel={`Editar a navegação ${map.name}`}
+                            onPress={() => router.push(`/organizer/event/${id}/map/${map.id}`)}
+                            accessibilityLabel={`Abrir a navegação ${map.name}`}
                           />
                         ))}
                       </View>

@@ -1,7 +1,7 @@
 import { Stack } from 'expo-router';
 import { Platform } from 'react-native';
 
-import { HeaderBackButton, HeaderModeButton } from '@/components/header-actions';
+import { HeaderActions, HeaderBackButton } from '@/components/header-actions';
 import { headerTheme } from '@/theme/tokens';
 
 /**
@@ -18,7 +18,7 @@ export default function OrganizerLayout() {
         ...headerTheme,
         headerBackVisible: false,
         headerLeft: (props) => <HeaderBackButton canGoBack={props.canGoBack} />,
-        headerRight: () => <HeaderModeButton />,
+        headerRight: () => <HeaderActions />,
         headerLargeTitle: Platform.OS === 'ios',
         animation: 'slide_from_right',
       }}
@@ -33,8 +33,14 @@ export default function OrganizerLayout() {
       />
       <Stack.Screen name="event/new" options={{ title: 'Novo evento' }} />
       <Stack.Screen name="event/[eventId]/index" options={{ title: 'Gerenciar evento' }} />
+      <Stack.Screen name="event/[eventId]/details" options={{ title: 'Detalhes do evento' }} />
       <Stack.Screen name="event/[eventId]/edit" options={{ title: 'Editar evento' }} />
       <Stack.Screen name="event/[eventId]/map/new" options={{ title: 'Nova navegação' }} />
+      <Stack.Screen name="event/[eventId]/map/[mapId]" options={{ title: 'Gerenciar navegação' }} />
+      <Stack.Screen
+        name="event/[eventId]/map/[mapId]/details"
+        options={{ title: 'Detalhes da navegação' }}
+      />
       <Stack.Screen name="map/[mapId]" options={{ title: 'Editar navegação' }} />
     </Stack>
   );

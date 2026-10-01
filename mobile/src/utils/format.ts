@@ -22,35 +22,46 @@ export function formatIsoDate(value: string | null | undefined): string | undefi
   return `${day}/${month}/${year}`;
 }
 
-const BR_DATE_PATTERN = /^(\d{2})\/(\d{2})\/(\d{4})$/;
+const pad = (value: number) => String(value).padStart(2, '0');
 
 /**
- * Converte a data digitada pelo usuário (`dd/mm/aaaa`) para `YYYY-MM-DD`, o
- * formato que a API exige. Devolve `null` quando o texto não é uma data válida
- * — inclusive quando o dia ou o mês não existem no calendário, que é o erro que
- * `new Date` deixaria passar.
+ * `Date` -> `YYYY-MM-DD`, o formato que a API exige.
+ *
+ * Monta a string com `getFullYear`/`getMonth`/`getDate` em vez de
+ * `toISOString`, que converte para UTC: em São Paulo (UTC-3) uma data escolhida
+ * depois das 21h voltaria um dia no resultado.
  */
-export function parseBrDate(value: string): string | null {
-  const match = BR_DATE_PATTERN.exec(value.trim());
-  if (!match) return null;
-
-  const [, day, month, year] = match;
-  const asDate = new Date(Number(year), Number(month) - 1, Number(day));
-
-  const isRealDate =
-    asDate.getFullYear() === Number(year) &&
-    asDate.getMonth() === Number(month) - 1 &&
-    asDate.getDate() === Number(day);
-
-  return isRealDate ? `${year}-${month}-${day}` : null;
+export function toIsoDate(date: Date): string {
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
 }
 
-/** Máscara progressiva de `dd/mm/aaaa`, usada enquanto o usuário digita. */
-export function maskBrDate(value: string): string {
-  const digits = value.replace(/\D/g, '').slice(0, 8);
+/**
+ * `YYYY-MM-DD` -> `Date` na meia-noite local, o valor que o seletor nativo
+ * precisa. Devolve `undefined` quando a string não é uma data completa.
+ */
+export function fromIsoDate(value: string | null | undefined): Date | undefined {
+  const match = value ? ISO_DATE_PATTERN.exec(value) : null;
+  if (!match) return undefined;
 
-  if (digits.length <= 2) return digits;
-  if (digits.length <= 4) return `${digits.slice(0, 2)}/${digits.slice(2)}`;
+  const [, year, month, day] = match;
+  return new Date(Number(year), Number(month) - 1, Number(day));
+}
 
-  return `${digits.slice(0, 2)}/${digits.slice(2, 4)}/${digits.slice(4)}`;
+/**
+ * Período do evento em uma frase, combinando as datas que existem. Devolve
+ * `undefined` quando nenhuma foi informada — quem chama decide o que escrever no
+ * lugar, porque o resumo do participante pula a linha e a tela de detalhes
+ * mostra "Não informado".
+ */
+export function formatDateRange(
+  startDate: string | null | undefined,
+  endDate: string | null | undefined,
+): string | undefined {
+  const start = formatIsoDate(startDate);
+  const end = formatIsoDate(endDate);
+
+  if (start && end) return `${start} a ${end}`;
+  if (start) return `Começa em ${start}`;
+  if (end) return `Termina em ${end}`;
+  return undefined;
 }

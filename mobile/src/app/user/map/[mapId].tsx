@@ -2,13 +2,19 @@ import { Stack, router, useLocalSearchParams } from 'expo-router';
 import { View } from 'react-native';
 
 import { AsyncContent } from '@/components/async-content';
+import { NavigationMenu } from '@/components/navigation-menu';
 import { Screen } from '@/components/screen';
 import { Alert, Button, Card, EmptyState, Icon, Text } from '@/components/ui';
 import { repository } from '@/data';
 import { useAsyncData } from '@/hooks/useAsyncData';
 import { colors } from '@/theme/tokens';
 
-/** Mapa da navegação. A renderização com react-native-maps entra na Sprint 3. */
+/**
+ * Mapa da navegação. A renderização com react-native-maps entra na Sprint 3.
+ *
+ * A tela é o mapa; os dados que o organizador informou sobre ele (nome, datas)
+ * ficam em `/user/map/[mapId]/details`, atrás do menu de três pontinhos.
+ */
 export default function UserMapScreen() {
   const { mapId } = useLocalSearchParams<{ mapId: string }>();
   const id = mapId ?? '';
@@ -19,7 +25,14 @@ export default function UserMapScreen() {
 
   return (
     <>
-      <Stack.Screen options={{ title: mapName ?? 'Mapa' }} />
+      <Stack.Screen
+        options={{
+          title: mapName ?? 'Mapa',
+          headerRight: () => (
+            <NavigationMenu mode="user" mapId={id} mapName={mapName ?? undefined} />
+          ),
+        }}
+      />
 
       <Screen scrollable testID="user-map-screen">
         <AsyncContent state={state} onRetry={reload} loadingLabel="Carregando o mapa…">
@@ -29,7 +42,7 @@ export default function UserMapScreen() {
                 <View className="h-64 items-center justify-center gap-4 rounded-lg border border-dashed border-gray-300 bg-background p-6">
                   <Icon name="map-outline" size={32} color={colors.gray300} />
                   <Text variant="subheading" centered>
-                    {data.name}
+                    Mapa do evento
                   </Text>
                   <Text variant="caption" centered className="max-w-xs">
                     O mapa desenhado pelo organizador aparece aqui, com os pontos de interesse e as

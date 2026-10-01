@@ -49,7 +49,7 @@ src/
 │   ├── user/       # área do usuário: eventos, navegações, mapa
 │   └── diagnostics.tsx # Sprint 0 (fora do fluxo, acessado por deep link)
 ├── components/     # camada de UI compartilhada
-│   ├── ui/         # primitivos (Button, Card, Input, Alert, Dialog, Badge, Text, Icon…)
+│   ├── ui/         # primitivos (Button, Card, Input, DateField, Menu, Alert, Dialog, Text, Icon…)
 │   ├── screen.tsx    # shell com SafeArea + scroll opcional
 │   ├── section.tsx   # título + ação de seção
 │   └── async-content.tsx # estados loading/error/empty de listas
@@ -156,6 +156,29 @@ contrastes está em `src/theme/tokens.js`.
 - Telas internas não repetem o título que o cabeçalho já mostra; mostram apenas o texto de apoio.
 - A troca de modo usa `router.dismissTo('/')`: dentro de uma tela aninhada ela sobe até `/`, e na raiz
   substitui a seção inteira — `router.replace('/')` resolveria dentro da pilha da seção.
+- `Stack.Screen` sobrescreve `headerRight` inteiro. Uma tela que tenha ação própria monta
+  `HeaderActions` de `src/components/header-actions.tsx` com a ação como `children`, em vez de
+  repetir o botão de troca de modo.
+- **Item de lista abre, menu edita.** Um item de lista leva para a tela da coisa; ver os dados
+  novamente ou editá-los é ação do menu de três pontinhos do cabeçalho (`src/components/ui/menu.tsx`,
+  que é o `MenuView` do `@expo/ui`). Isso vale para eventos e para navegações, e vale para os dois
+  lados: nenhum item de lista abre direto no editor. Editar dado direto da lista mostrava um editor
+  sem contexto e escondia o resto do que a tela mostra.
+- **A tela do dia a dia não mostra os dados da coisa; os dados têm tela própria.** Evento e
+  navegação seguem a mesma forma: descrição, período e datas vão para `/details`, e a tela que o
+  item da lista abriu fica com o que a coisa _é_ (as navegações de um evento, o mapa de uma
+  navegação). Sem essa separação o mesmo dado aparecia inline em uma tela e em outra não — o que
+  fazia a navegação parecer errada.
+- As telas de detalhes dos dois lados são o mesmo componente de conteúdo
+  (`EventDetailsView`, `NavigationDetailsView`): o que muda entre organizador e participante é o
+  que dá para _fazer_ com os dados, e isso mora no menu, não no corpo da tela.
+- O modo do menu vem de `MenuMode` (`src/components/event-menu.tsx`) e é o que monta o caminho de
+  `/details` e decide se "Editar" existe. No participante só há "Ver detalhes"; na própria tela de
+  detalhes não há "Ver detalhes", para não empilhar a mesma tela duas vezes.
+- **Caminho de rota tem que continuar template literal dentro do `router.push`.** O `Href` gerado
+  pelo Expo Router só aceita template com prefixo literal; extrair o caminho para uma variável o
+  vira `string` e o `typecheck` recusa. Por isso os menus montam o ternário do modo dentro do
+  `onSelect`.
 
 ## Navigation map (Sprint 1)
 
@@ -163,15 +186,25 @@ contrastes está em `src/theme/tokens.js`.
 /                        Escolha do modo de uso (sem login)
 /organizer               Eventos do organizador + "Criar evento"
 /organizer/event/new     Criar evento
-/organizer/event/[eventId]            Gerenciar evento: criar navegação e visualizar navegações
-/organizer/event/[eventId]/edit       Editar evento
-/organizer/event/[eventId]/map/new    Criar navegação
-/organizer/map/[mapId]                Editar navegação (título; mapa e POIs em Sprints 3, 5 a 8)
+/organizer/event/[eventId]              Gerenciar evento: criar navegação e visualizar navegações
+/organizer/event/[eventId]/details      Detalhes do evento (descrição, período, criado/atualizado em)
+/organizer/event/[eventId]/edit         Editar evento
+/organizer/event/[eventId]/map/new      Criar navegação
+/organizer/event/[eventId]/map/[mapId]  Gerenciar navegação (o que vem a seguir; mapa e POIs nas Sprints 3, 5 a 8)
+/organizer/event/[eventId]/map/[mapId]/details  Detalhes da navegação (criada/atualizada em)
+/organizer/map/[mapId]                  Editar navegação (título; mapa e POIs nas Sprints 3, 5 a 8)
 /user                    Eventos para consulta
-/user/event/[eventId]    Navegações do evento
-/user/map/[mapId]        Mapa da navegação
+/user/event/[eventId]      Navegações do evento
+/user/event/[eventId]/details  Detalhes do evento (mesmos dados, sem edição)
+/user/map/[mapId]          Mapa da navegação
+/user/map/[mapId]/details  Detalhes do mapa
 /diagnostics             Sprint 0: health do backend + permissão de localização (deep link)
 ```
+
+Detalhes da navegação é aninhado no evento no organizador porque a tela da navegação também é
+(`/organizer/event/[eventId]/map/[mapId]`). No participante o mapa é `/user/map/[mapId]`, sem o
+evento no caminho, então os detalhes são `/user/map/[mapId]/details`. A regra é a mesma: fica do
+lado da tela que descreve.
 
 ## Data layer
 
@@ -211,6 +244,42 @@ Accessibility data is organizer-reported: never present a route as "safe" or "id
   são importados, por subpath, para não embarcar os 18 arquivos da família no bundle.
 - `@react-native-async-storage/async-storage` — removed. The prototype must not persist anything;
   it comes back in RNF05 behind `src/data/` when recorded paths need to survive app restarts.
+- `@expo/ui` — pacote oficial do Expo, usado em dois primitivos de `src/components/ui/`, que são
+  componentes nativos e não JavaScript:
+  - `@expo/ui/community/datetime-picker` no `DateField` — `DateTimePicker` com a API do
+    `@react-native-community/datetimepicker`, que é SwiftUI `DatePicker` no iOS e o calendário do
+    Material 3 no Android. O app **não** usa `@react-native-community/datetimepicker` diretamente
+    justamente porque o `@expo/ui` é a opção oficial do mesmo componente.
+  - `@expo/ui/community/menu` no `Menu` — `MenuView` com a API do `@react-native-menu/menu`: SwiftUI
+    `Menu` no iOS e `DropdownMenu` do Material 3 no Android, ou seja, o dropdown que o sistema já
+    desenha. Escrever o painel em JavaScript exigiria um `Modal`, medir a âncora e ainda ficaria com
+    cara de app web.
+
+  Em ambos os casos a alternativa seria uma biblioteca da comunidade equivalente, o que a regra do
+  repositório não prefere. `@expo/ui` não traz config plugin: ele entra por autolinking, então uma
+  dependência nativa nova exige um novo build de desenvolvimento, que o app já exige por causa de
+  `react-native-maps` e `expo-camera`.
+
+## Datas
+
+- O seletor de data é sempre o nativo. Não reintroduza máscara `dd/mm/aaaa` em `TextInput`: o
+  calendário não deixa o usuário escrever `31/02`, que é exatamente o que a máscara deixava passar.
+- O valor trafega em `YYYY-MM-DD` dentro do formulário — o mesmo formato da API — e vira `Date` só
+  para mostrar o calendário. `utils/format.ts` tem `toIsoDate`/`fromIsoDate` para essa borda.
+- O iOS não tem `presentation="dialog"`: o `DateTimePicker` é sempre inline, então o `DateField` o
+  coloca num `Modal` próprio com "Limpar" e "Concluir". Sem esses dois botões não haveria como fechar
+  nem como limpar um campo opcional.
+- **Não passe `minimumDate`/`maximumDate` para o `DateField`.** No `DateTimePicker` do `@expo/ui`
+  elas viram o `range` do `DatePicker` do SwiftUI, e um `range` troca o calendário por um seletor de
+  intervalo com duas alças — em iOS, não em Android. Regras de faixa de data ficam na validação do
+  formulário, que se comporta igual nas duas plataformas.
+
+## Inputs controlados
+
+- **Não reescreva o valor dentro do `onChangeText`.** No iOS o texto nativo do campo é a fonte da
+  verdade da posição do cursor; devolver um valor diferente do que o teclado produz desincroniza os
+  dois, e a tecla seguinte entra num deslocamento antigo — digitar "rec" no nome do evento virava
+  "Rrec". Deixe a capitalização com a plataforma (`autoCapitalize`) e grave o texto como veio.
 
 ## Building with EAS
 

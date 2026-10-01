@@ -1,19 +1,20 @@
 import { useState } from 'react';
 import { router, useLocalSearchParams } from 'expo-router';
-import { View } from 'react-native';
 
 import { AsyncContent } from '@/components/async-content';
 import { Screen } from '@/components/screen';
-import { Section } from '@/components/section';
-import { Alert, Badge, Button, Card, EmptyState, Icon, Input, Text } from '@/components/ui';
+import { Alert, Button, Card, EmptyState, Input } from '@/components/ui';
 import { repository } from '@/data';
 import { useAsyncData } from '@/hooks/useAsyncData';
-import { colors } from '@/theme/tokens';
 import { toErrorMessage } from '@/utils/errors';
 
 /**
- * Editor da navegação. O título já é editável; a estrutura do mapa (pontos de
+ * Editar Navegação: só o título, por enquanto. A estrutura do mapa (pontos de
  * interesse, conexões e desenho) entra nas próximas fases.
+ *
+ * O editor é uma tela à parte justamente porque a navegação se abre pela lista:
+ * quem chega aqui escolheu editar, e por isso não repete o resumo nem o menu da
+ * tela anterior.
  */
 export default function EditNavigationMapScreen() {
   const { mapId } = useLocalSearchParams<{ mapId: string }>();
@@ -26,72 +27,24 @@ export default function EditNavigationMapScreen() {
       <AsyncContent state={state} onRetry={reload} loadingLabel="Carregando a navegação…">
         {(data) =>
           data ? (
-            <>
-              <NavigationTitleCard
-                key={data.id}
-                mapId={id}
-                initialTitle={data.name}
-                onSaved={reload}
-              />
-
-              <Section
-                title="O que vem a seguir"
-                description="A navegação já existe e pode ser renomeada a qualquer momento."
-              >
-                <Card variant="soft">
-                  <UpcomingItem
-                    icon="map-marker-multiple-outline"
-                    title="Pontos de interesse"
-                    description="Entradas, banheiros, elevadores, escadas e balcões de informação."
-                  />
-                  <UpcomingItem
-                    icon="vector-polyline"
-                    title="Conexões"
-                    description="Os caminhos que ligam os pontos, com largura, rampas e presença de escadas."
-                  />
-                  <UpcomingItem
-                    icon="map-outline"
-                    title="Mapa"
-                    description="Desenho do espaço com a posição de cada ponto e das áreas."
-                  />
-                </Card>
-              </Section>
-
-              <Button label="Voltar ao evento" variant="ghost" onPress={() => router.back()} />
-            </>
+            <NavigationTitleCard
+              key={data.id}
+              mapId={id}
+              initialTitle={data.name}
+              onSaved={reload}
+            />
           ) : (
             <EmptyState
               icon="map-search-outline"
               title="Navegação não encontrada"
               description="Ela pode ter sido removida desde que esta tela foi aberta."
-            />
+            >
+              <Button label="Voltar" variant="outline" onPress={() => router.back()} />
+            </EmptyState>
           )
         }
       </AsyncContent>
     </Screen>
-  );
-}
-
-type UpcomingItemProps = {
-  icon: 'map-marker-multiple-outline' | 'vector-polyline' | 'map-outline';
-  title: string;
-  description: string;
-};
-
-function UpcomingItem({ icon, title, description }: UpcomingItemProps) {
-  return (
-    <View className="flex-row items-start gap-3">
-      <View className="size-10 items-center justify-center rounded-md bg-background">
-        <Icon name={icon} size={20} color={colors.gray500} />
-      </View>
-      <View className="flex-1 gap-1">
-        <View className="flex-row items-center gap-2">
-          <Text variant="label">{title}</Text>
-          <Badge label="Em breve" />
-        </View>
-        <Text variant="caption">{description}</Text>
-      </View>
-    </View>
   );
 }
 

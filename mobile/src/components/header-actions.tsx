@@ -1,4 +1,6 @@
+import type { ReactNode } from 'react';
 import { router } from 'expo-router';
+import { View } from 'react-native';
 
 import { IconButton } from '@/components/ui';
 
@@ -43,5 +45,23 @@ export function HeaderModeButton() {
       onPress={() => router.dismissTo('/')}
       testID="header-switch-mode"
     />
+  );
+}
+
+/**
+ * Lado direito do cabeçalho: as ações da tela, quando existirem, e a troca de
+ * modo.
+ *
+ * `Stack.Screen` sobrescreve `headerRight` inteiro, então uma tela que precise do
+ * próprio menu precisa montar este componente em vez de repetir o botão de modo.
+ * `children` fica à esquerda para manter a hierarquia do iOS: a ação da tela
+ * primeiro, a troca de modo por último.
+ */
+export function HeaderActions({ children }: { children?: ReactNode }) {
+  return (
+    <View className="flex-row items-center">
+      {children}
+      <HeaderModeButton />
+    </View>
   );
 }

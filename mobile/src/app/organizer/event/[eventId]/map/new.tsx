@@ -30,7 +30,7 @@ export default function NewNavigationMapScreen() {
 
     try {
       const map = await repository.createNavigationMap({ eventId: id, name: trimmedName });
-      router.replace(`/organizer/map/${map.id}`);
+      router.replace(`/organizer/event/${id}/map/${map.id}`);
     } catch (error) {
       setSubmitError(toErrorMessage(error, 'Não foi possível criar a navegação.'));
       setSaving(false);

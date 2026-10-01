@@ -2,16 +2,15 @@ import { useState } from 'react';
 import { router } from 'expo-router';
 import { View } from 'react-native';
 
-import { Alert, Button, Card, Icon, Input } from '@/components/ui';
+import { Alert, Button, Card, DateField, Icon, Input } from '@/components/ui';
 import { colors } from '@/theme/tokens';
 import { toErrorMessage } from '@/utils/errors';
-import { formatIsoDate, maskBrDate, parseBrDate } from '@/utils/format';
 
 const NAME_MAX_LENGTH = 120;
 const DESCRIPTION_MAX_LENGTH = 2000;
 const ADDRESS_MAX_LENGTH = 200;
 
-/** Valores como estão no formulário: as datas são `dd/mm/aaaa`. */
+/** Valores como estão no formulário: as datas são `YYYY-MM-DD`, ou `''`. */
 export type EventFormValues = {
   name: string;
   description: string;
@@ -49,10 +48,10 @@ const EMPTY_VALUES: EventFormValues = {
 /**
  * Formulário de evento, compartilhado por "Criar evento" e "Editar evento".
  *
- * A data é digitada como `dd/mm/aaaa`, que é o formato que o usuário brasileiro
- * lê sem esforço, e convertida para `YYYY-MM-DD` só na submissão. A API valida
- * de novo do mesmo jeito: a checagem local existe para não gastar uma ida ao
- * servidor, não para substituir a regra.
+ * As datas vêm do seletor nativo do aparelho já em `YYYY-MM-DD`, o mesmo formato
+ * da API, então não existe conversão nem máscara: o campo não aceita texto
+ * digitado. A checagem local da ordem das datas existe só para não gastar uma
+ * ida ao servidor — a API valida de novo do mesmo jeito.
  */
 export function EventForm({
   initialValues,
@@ -87,18 +86,9 @@ export function EventForm({
       next.address = `O endereço deve ter no máximo ${ADDRESS_MAX_LENGTH} caracteres.`;
     }
 
-    const startDate = values.startDate.trim() ? parseBrDate(values.startDate) : null;
-    const endDate = values.endDate.trim() ? parseBrDate(values.endDate) : null;
-
-    if (values.startDate.trim() && !startDate) {
-      next.startDate = 'Informe a data no formato dd/mm/aaaa. Exemplo: 05/10/2026.';
-    }
-
-    if (values.endDate.trim() && !endDate) {
-      next.endDate = 'Informe a data no formato dd/mm/aaaa. Exemplo: 05/10/2026.';
-    }
-
-    if (startDate && endDate && endDate < startDate) {
+    // `YYYY-MM-DD` compara como string: mesmo formato, mesma largura, mesma
+    // ordem lexicográfica que a do calendário.
+    if (values.startDate && values.endDate && values.endDate < values.startDate) {
       next.endDate = 'A data final não pode ser anterior à data inicial.';
     }
 
@@ -121,8 +111,8 @@ export function EventForm({
         name: values.name.trim(),
         description: values.description.trim(),
         address: values.address.trim() || null,
-        startDate: values.startDate.trim() ? parseBrDate(values.startDate) : null,
-        endDate: values.endDate.trim() ? parseBrDate(values.endDate) : null,
+        startDate: values.startDate || null,
+        endDate: values.endDate || null,
       });
     } catch (error) {
       setSubmitError(toErrorMessage(error, 'Não foi possível salvar o evento.'));
@@ -136,13 +126,14 @@ export function EventForm({
         <Input
           label="Nome do evento"
           value={values.name}
-          onChangeText={(value) =>
-            // Só a primeira letra sobe: deixar o resto em minúsculas impede
-            // digitar "Feira de Tecnologia".
-            setField('name', value.charAt(0).toUpperCase() + value.slice(1))
-          }
+          onChangeText={(value) => setField('name', value)}
           placeholder="Feira de Tecnologia Acessível"
-          autoCapitalize="none"
+          // A capitalização fica com o aparelho. Reescrever o valor dentro do
+          // `onChangeText` desincroniza o texto nativo do valor controlado no
+          // iOS, e a próxima tecla entra num deslocamento antigo: digitar "rec"
+          // virava "Rrec". `sentences` sobe a primeira letra sem passar por
+          // baixo do teclado de novo.
+          autoCapitalize="sentences"
           returnKeyType="next"
           errorText={errors.name}
           testID="event-name"
@@ -174,26 +165,20 @@ export function EventForm({
       </Card>
 
       <Card>
-        <Input
+        <DateField
           label="Data inicial"
           isOptional
           value={values.startDate}
-          onChangeText={(value) => setField('startDate', maskBrDate(value))}
-          placeholder="dd/mm/aaaa"
-          keyboardType="number-pad"
+          onChange={(value) => setField('startDate', value)}
           errorText={errors.startDate}
-          testID="event-start-date"
         />
 
-        <Input
+        <DateField
           label="Data final"
           isOptional
           value={values.endDate}
-          onChangeText={(value) => setField('endDate', maskBrDate(value))}
-          placeholder="dd/mm/aaaa"
-          keyboardType="number-pad"
+          onChange={(value) => setField('endDate', value)}
           errorText={errors.endDate}
-          testID="event-end-date"
         />
       </Card>
 
@@ -227,7 +212,7 @@ export function toEventFormValues(event: {
     name: event.name,
     description: event.description ?? '',
     address: event.address ?? '',
-    startDate: formatIsoDate(event.startDate) ?? '',
-    endDate: formatIsoDate(event.endDate) ?? '',
+    startDate: event.startDate ?? '',
+    endDate: event.endDate ?? '',
   };
 }
