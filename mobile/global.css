@@ -1,0 +1,5 @@
+/* NativeWind lê este arquivo: as diretivas do Tailwind alimentam as classes
+   usadas no aplicativo. */
+@tailwind base;
+@tailwind components;
+@tailwind utilities;

@@ -16,3 +16,11 @@ export const appEnv = process.env.EXPO_PUBLIC_APP_ENV || 'development';
 export const requestTimeoutMs = Number(process.env.EXPO_PUBLIC_REQUEST_TIMEOUT_MS || 10000);
 
 export const isProduction = appEnv === 'production';
+
+/**
+ * Origem dos dados: `api` (padrão) usa a REST do backend; `memory` mantém o
+ * protótipo em memória para desenvolver a interface com a API desligada.
+ */
+export const dataSource = process.env.EXPO_PUBLIC_DATA_SOURCE || 'api';
+
+export const useInMemoryData = dataSource === 'memory';

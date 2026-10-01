@@ -1,56 +1,70 @@
 import type { ReactNode } from 'react';
-import { StyleSheet, Text, View } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { ScrollView, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { colors, spacing, typography } from '@/theme/theme';
+import { tv, type VariantProps } from '../lib/tv';
 
-type ScreenProps = {
+type ScreenProps = VariantProps<typeof screenVariants> & {
   children: ReactNode;
-  title?: string;
-  subtitle?: string;
+  /** Role a rolagem quando o conteúdo não couber na tela. */
   scrollable?: boolean;
+  className?: string;
   testID?: string;
+  /** Espaçamento interno; o padrão dá respiro lateral e vertical. */
+  contentClassName?: string;
 };
 
-export function Screen({ children, title, subtitle, scrollable = false, testID }: ScreenProps) {
-  const content = (
-    <View style={styles.content}>
-      {title ? (
-        <Text style={styles.title} accessibilityRole="header">
-          {title}
-        </Text>
-      ) : null}
-      {subtitle ? <Text style={styles.subtitle}>{subtitle}</Text> : null}
-      {children}
-    </View>
-  );
+/**
+ * Casca das telas: fundo neutro, áreas seguras respeitadas e o mesmo respiro
+ * horizontal em todas as telas.
+ *
+ * O padrão implementa o `paddingHorizontal: 20` do `design.md` e o ritmo vertical
+ * de 24px entre seções, 16px entre componentes relacionados e 8px entre elementos
+ * internos.
+ */
+export function Screen({
+  children,
+  scrollable,
+  variant = 'canvas',
+  className,
+  contentClassName,
+  testID,
+}: ScreenProps) {
+  const insets = useSafeAreaInsets();
+  const containerClass = screenVariants({ variant, className });
+
+  if (!scrollable) {
+    return (
+      <View className={containerClass} testID={testID}>
+        <View className={contentClassName ?? 'gap-6 px-5 py-5'}>{children}</View>
+      </View>
+    );
+  }
 
   return (
-    <SafeAreaView style={styles.container} edges={['top', 'left', 'right']} testID={testID}>
-      {scrollable ? <View style={styles.scroll}>{content}</View> : content}
-    </SafeAreaView>
+    <ScrollView
+      testID={testID}
+      className={containerClass}
+      contentContainerClassName={contentClassName ?? 'gap-6 px-5 py-5 pb-8'}
+      contentInsetAdjustmentBehavior="automatic"
+      keyboardShouldPersistTaps="handled"
+      showsVerticalScrollIndicator={false}
+      style={{ paddingBottom: insets.bottom }}
+    >
+      {children}
+    </ScrollView>
   );
 }
 
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: colors.background,
+const screenVariants = tv({
+  base: 'flex-1',
+  variants: {
+    variant: {
+      canvas: 'bg-surface',
+      background: 'bg-background',
+    },
   },
-  scroll: {
-    flex: 1,
-  },
-  content: {
-    flexGrow: 1,
-    padding: spacing.md,
-    gap: spacing.md,
-  },
-  title: {
-    ...typography.title,
-    color: colors.text,
-  },
-  subtitle: {
-    ...typography.caption,
-    color: colors.textMuted,
+  defaultVariants: {
+    variant: 'canvas',
   },
 });

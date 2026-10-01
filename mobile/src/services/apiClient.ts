@@ -26,6 +26,33 @@ async function readErrorBody(response: Response): Promise<unknown> {
   }
 }
 
+/**
+ * A API responde os erros de validação em pt-BR (as regras do backend já vêm
+ * com a mensagem pronta), então o corpo é preferido ao "Falha na requisição".
+ * Sem isso o usuário leria apenas o código HTTP.
+ */
+function resolveErrorMessage(status: number, body: unknown): string {
+  if (body && typeof body === 'object' && 'message' in body) {
+    const { message } = body as { message: unknown };
+
+    if (typeof message === 'string' && message.length > 0) {
+      return message;
+    }
+
+    if (Array.isArray(message)) {
+      const texts = message.filter(
+        (item): item is string => typeof item === 'string' && item.length > 0,
+      );
+
+      if (texts.length > 0) {
+        return texts.join(' ');
+      }
+    }
+  }
+
+  return `Falha na requisição (${status})`;
+}
+
 async function request<T>(path: string, options: RequestOptions = {}): Promise<T> {
   const { method = 'GET', body, signal } = options;
 
@@ -46,7 +73,11 @@ async function request<T>(path: string, options: RequestOptions = {}): Promise<T
 
     if (!response.ok) {
       const errorBody = await readErrorBody(response);
-      throw new ApiError(`Falha na requisição (${response.status})`, response.status, errorBody);
+      throw new ApiError(
+        resolveErrorMessage(response.status, errorBody),
+        response.status,
+        errorBody,
+      );
     }
 
     if (response.status === 204) {
