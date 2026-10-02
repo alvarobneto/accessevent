@@ -20,14 +20,17 @@ type InputProps = TextInputProps &
     startIcon?: ReactNode;
     className?: string;
     containerClassName?: string;
+    /** Altura do campo: 48px, 52px ou 56px. É `fieldVariants` que a aplica. */
+    size?: 'sm' | 'md' | 'lg';
   };
 
 /**
  * Campo de texto: rótulo, dica e erro sempre no mesmo lugar.
  *
- * `size` tem padrão aqui, e não só em `fieldVariants.defaultVariants`: as duas
- * variantes compostas recebem o valor cru, e sem o padrão `inputVariants`
- * perderia o padding vertical.
+ * `size` tem padrão aqui, e não só em `fieldVariants.defaultVariants`: as
+ * variantes compostas recebem o valor cru, e sem o padrão o campo perderia a
+ * altura do `design.md`. O `TextInput` não recebe mais `size` — a altura é do
+ * campo, e ele preenche a caixa toda.
  *
  * O `design.md` pede quatro estados — default, focus, error e disabled. Focus e
  * error viram borda colorida; disabled reusa `opacity-40` do `Button`, que é o
@@ -63,12 +66,13 @@ export function Input({
       <View
         className={fieldVariants({
           size,
+          multiline,
           focused: isFocused && !hasError && !disabled,
           invalid: hasError,
           disabled,
         })}
       >
-        {startIcon ? <View className="pr-1">{startIcon}</View> : null}
+        {startIcon ? <View className="self-center pr-1">{startIcon}</View> : null}
         <TextInput
           accessibilityLabel={label}
           aria-invalid={hasError}
@@ -86,7 +90,8 @@ export function Input({
             setIsFocused(false);
             onBlur?.(event);
           }}
-          className={inputVariants({ size, multiline, disabled, className })}
+          className={inputVariants({ multiline, disabled, className })}
+          style={{ textAlignVertical: multiline ? 'top' : 'center', includeFontPadding: false }}
           {...props}
         />
       </View>
@@ -109,6 +114,12 @@ const fieldVariants = tv({
       md: 'min-h-13',
       lg: 'min-h-14',
     },
+    /**
+     * Texto longo cresce para baixo e começa no topo. O padding vertical fica
+     * no campo, não no `TextInput`: é o mesmo lugar do `px-3`, e o controle
+     * nativo continua com `textAlignVertical: 'top'` nesses campos.
+     */
+    multiline: { true: 'items-start py-3' },
     /** `design.md` Inputs: focus com `borderColor: primary`. */
     focused: { true: 'border-primary' },
     /** `design.md` Inputs: erro com `borderColor: error`. */
@@ -122,27 +133,34 @@ const fieldVariants = tv({
 
 const inputVariants = tv({
   /**
-   * `text-body` traz o lineHeight do token (16/24). Num `TextInput` de linha
-   * única no iOS esse lineHeight maior que a fonte desalinha os glifos
-   * verticalmente dentro da caixa, e o desvio fica mais visível quando o campo
-   * entra em foco, porque o iOS recalcula o container de texto nesse momento.
-   * `leading-none` deixa a caixa de linha do tamanho da fonte, que é o que
-   * centraliza de fato. No `multiline` voltamos a `leading-normal`, que em 16px
-   * dá 24px — o mesmo lineHeight do token, então a leitura do texto longo não
-   * fica apertada.
+   * **Sem `line-height` em campo de linha única, e o placeholder é o motivo.**
+   * `text-body` traz 16/24, e no iOS o `line-height` maior que a fonte faz o
+   * UIKit ancorar o placeholder no fundo da caixa de linha enquanto o texto
+   * digitado é centralizado na altura natural da fonte — os dois em alturas
+   * diferentes. `leading-none` não resolvia: `1` vira `1em`, ou seja 16px, e
+   * 16px ainda é um `line-height` explícito para o UIKit posicionar. A saída é
+   * não declarar nenhum: `text-bodyInput` no `tailwind.config.js` é o mesmo
+   * 16px do `body` sem a altura de linha, então o `UITextField` centraliza
+   * glifo, cursor e placeholder na mesma altura natural da fonte.
    *
-   * `min-h-11` (44px) é o piso de alvo de toque do RNF04: sem ele, trocar o
-   * lineHeight de 24px por 16px derrubaria o campo de 48px para 40px.
+   * O `TextInput` também não usa padding vertical: ele ocupa a altura inteira do
+   * campo (`self-stretch`) e quem centraliza é o próprio controle nativo, com
+   * `textAlignVertical: 'center'` no Android. Padding vertical aqui era o que
+   * deixava folga de um lado só.
+   *
+   * `min-h-11` (44px) é o piso de alvo de toque do RNF04, abaixo das alturas de
+   * campo do `design.md` (48/52/56px), então nunca chega a mandar na altura.
    */
-  base: 'flex-1 min-h-11 font-regular text-body leading-none text-content',
+  base: 'flex-1 min-h-11 self-stretch font-regular text-bodyInput text-content',
   variants: {
-    size: {
-      sm: 'py-1',
-      md: 'py-2',
-      lg: 'py-3',
-    },
     multiline: {
-      true: 'py-3 leading-normal',
+      /**
+       * Texto longo precisa do lineHeight do token (16/24) para a leitura não
+       * ficar apertada, e aqui o placeholder usa a mesma caixa de linha do
+       * texto, então os dois continuam alinhados. O padding e o topo ficam no
+       * `fieldVariants`.
+       */
+      true: 'leading-normal',
     },
     disabled: { true: 'opacity-40' },
   },

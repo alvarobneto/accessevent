@@ -118,12 +118,26 @@ const touchTarget = {
  * tamanho em um deles para o erro voltar em silêncio — classes de tamanho
  * desaparecendo e cores sendo sobrescritas. Ver `src/lib/tv.ts`.
  */
+/**
+ * `16px` do `body`, repetido aqui porque um `fontSize` do Tailwind escrito como
+ * número solto (`'16px'`) gera **só** `font-size`, sem `line-height` — e é
+ * exatamente a ausência de `line-height` que o `Input` de linha única precisa.
+ *
+ * Ver `src/components/ui/input.tsx`: com `line-height` setado, o iOS ancora o
+ * placeholder no fundo da caixa de linha enquanto centraliza o texto digitado na
+ * altura natural da fonte, e os dois ficam em alturas diferentes. O tamanho em si
+ * é o mesmo do `body`, então vem do mesmo `'16px'` e não duplica o literal.
+ */
+const bodyFontSize = '16px';
+
 const fontSize = {
   display: ['32px', '40px'],
   h1: ['28px', '36px'],
   h2: ['24px', '32px'],
   h3: ['20px', '28px'],
-  body: ['16px', '24px'],
+  body: [bodyFontSize, '24px'],
+  /** Mesmo tamanho do `body`, sem `line-height`. Ver o comentário acima. */
+  bodyInput: bodyFontSize,
   caption: ['14px', '20px'],
 };
 
