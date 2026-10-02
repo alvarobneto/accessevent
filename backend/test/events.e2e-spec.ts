@@ -66,6 +66,11 @@ function createRepositoryMock() {
       else rows.push(row);
       return row as EventEntity;
     },
+    async remove(entity: EventEntity) {
+      const index = rows.findIndex((row) => row.id === entity.id);
+      if (index >= 0) rows.splice(index, 1);
+      return entity;
+    },
   };
 
   return { rows, repository };
@@ -205,6 +210,63 @@ describe('/events (e2e)', () => {
       .expect(200);
 
     expect(response.body.description).toBeNull();
+  });
+
+  it('apaga um evento e devolve 204 sem corpo', async () => {
+    const created = await request(app.getHttpServer())
+      .post('/events')
+      .send({ name: 'Feira' })
+      .expect(201);
+
+    const response = await request(app.getHttpServer())
+      .delete(`/events/${created.body.id}`)
+      .expect(204);
+
+    expect(response.text).toBe('');
+    expect(rows).toHaveLength(0);
+  });
+
+  it('deixa de listar o evento apagado', async () => {
+    const kept = await request(app.getHttpServer())
+      .post('/events')
+      .send({ name: 'Congresso Acessível' })
+      .expect(201);
+    const removed = await request(app.getHttpServer())
+      .post('/events')
+      .send({ name: 'Feira' })
+      .expect(201);
+
+    await request(app.getHttpServer())
+      .delete(`/events/${removed.body.id}`)
+      .expect(204);
+
+    const listed = await request(app.getHttpServer())
+      .get('/events')
+      .expect(200);
+
+    expect(listed.body.map((event: { id: string }) => event.id)).toEqual([
+      kept.body.id,
+    ]);
+  });
+
+  it('devolve 404 ao apagar evento inexistente', async () => {
+    await request(app.getHttpServer())
+      .delete('/events/00000000-0000-0000-0000-000000000000')
+      .expect(404)
+      .expect(({ body }) => {
+        expect(body.message).toBe('Evento não encontrado.');
+      });
+  });
+
+  it('devolve 400 e não 500 ao apagar com id que não é UUID', async () => {
+    await request(app.getHttpServer())
+      .delete('/events/nao-e-um-uuid')
+      .expect(400)
+      .expect(({ body }) => {
+        expect(body.message).toBe(
+          'Identificador inválido. Informe um UUID válido.',
+        );
+      });
   });
 
   it('rejeita evento sem nome com mensagem em pt-BR', async () => {

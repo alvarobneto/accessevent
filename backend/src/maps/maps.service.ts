@@ -50,6 +50,11 @@ export class MapsService {
     return toMapResponse(await this.maps.save(map));
   }
 
+  /** Apaga a navegação. Os caminhos e pontos que forem criados depois herdam o mesmo `CASCADE`. */
+  async remove(id: string): Promise<void> {
+    await this.maps.remove(await this.getEntityOrFail(id));
+  }
+
   private async getEntityOrFail(id: string): Promise<MapEntity> {
     const map = await this.maps.findOne({ where: { id } });
 

@@ -72,6 +72,14 @@ export class EventsService {
     return toEventResponse(await this.events.save(event));
   }
 
+  /**
+   * Apaga o evento. As navegações dele vão junto pela chave estrangeira com
+   * `ON DELETE CASCADE`, então não há nada para apagar em cascata aqui.
+   */
+  async remove(id: string): Promise<void> {
+    await this.events.remove(await this.getEntityOrFail(id));
+  }
+
   private async getEntityOrFail(id: string): Promise<EventEntity> {
     const event = await this.events.findOne({ where: { id } });
 

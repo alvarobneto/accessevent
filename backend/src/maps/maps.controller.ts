@@ -1,6 +1,7 @@
 import {
   Body,
   Controller,
+  Delete,
   Get,
   HttpCode,
   HttpStatus,
@@ -38,7 +39,7 @@ export class EventMapsController {
   }
 }
 
-/** Navegação avulsa: buscar pelo id e renomear. */
+/** Navegação avulsa: buscar pelo id, renomear e apagar. */
 @Controller('maps')
 export class MapsController {
   constructor(private readonly maps: MapsService) {}
@@ -56,5 +57,12 @@ export class MapsController {
     @Body() dto: UpdateMapDto,
   ): Promise<MapResponse> {
     return this.maps.update(mapId, dto);
+  }
+
+  /** `204` sem corpo, como no apagado de evento. */
+  @Delete(':mapId')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  async remove(@Param('mapId', ParseUuidPipe()) mapId: string): Promise<void> {
+    await this.maps.remove(mapId);
   }
 }

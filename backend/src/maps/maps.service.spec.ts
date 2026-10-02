@@ -32,11 +32,13 @@ describe('MapsService (unit)', () => {
   const find = vi.fn<() => Promise<MapEntity[]>>();
   const findOne = vi.fn<() => Promise<MapEntity | null>>();
   const exists = vi.fn<() => Promise<boolean>>();
+  const remove = vi.fn<(entity: MapEntity) => Promise<MapEntity>>();
   const maps = {
     create,
     save,
     find,
     findOne,
+    remove,
   } as unknown as Repository<MapEntity>;
   const events = { exists } as unknown as Repository<EventEntity>;
 
@@ -49,6 +51,7 @@ describe('MapsService (unit)', () => {
     find.mockResolvedValue([]);
     findOne.mockResolvedValue(null);
     exists.mockResolvedValue(true);
+    remove.mockImplementation(async (entity) => entity);
 
     const moduleRef: TestingModule = await Test.createTestingModule({
       providers: [
@@ -129,5 +132,24 @@ describe('MapsService (unit)', () => {
 
     const [saved] = save.mock.calls[0] ?? [];
     expect(saved?.name).toBe('Térreo');
+  });
+
+  it('deletes the map it just found', async () => {
+    findOne.mockResolvedValue(makeRow());
+
+    await service.remove('map-1');
+
+    const [deleted] = remove.mock.calls[0] ?? [];
+    expect(deleted?.id).toBe('map-1');
+  });
+
+  it('throws 404 and deletes nothing when the map does not exist', async () => {
+    findOne.mockResolvedValue(null);
+
+    await expect(service.remove('missing')).rejects.toMatchObject({
+      status: 404,
+    });
+
+    expect(remove).not.toHaveBeenCalled();
   });
 });

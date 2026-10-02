@@ -36,11 +36,13 @@ describe('EventsService (unit)', () => {
   const save = vi.fn<(entity: EventEntity) => Promise<EventEntity>>();
   const find = vi.fn<() => Promise<EventEntity[]>>();
   const findOne = vi.fn<() => Promise<EventEntity | null>>();
+  const remove = vi.fn<(entity: EventEntity) => Promise<EventEntity>>();
   const events = {
     create,
     save,
     find,
     findOne,
+    remove,
   } as unknown as Repository<EventEntity>;
 
   let service: EventsService;
@@ -51,6 +53,7 @@ describe('EventsService (unit)', () => {
     save.mockImplementation(async (entity) => makeRow(entity as EventRow));
     find.mockResolvedValue([]);
     findOne.mockResolvedValue(null);
+    remove.mockImplementation(async (entity) => entity);
 
     const moduleRef: TestingModule = await Test.createTestingModule({
       providers: [
@@ -161,5 +164,24 @@ describe('EventsService (unit)', () => {
     });
 
     expect(save).not.toHaveBeenCalled();
+  });
+
+  it('deletes the event it just found', async () => {
+    findOne.mockResolvedValue(makeRow());
+
+    await service.remove('event-1');
+
+    const [deleted] = remove.mock.calls[0] ?? [];
+    expect(deleted?.id).toBe('event-1');
+  });
+
+  it('throws 404 and deletes nothing when the event does not exist', async () => {
+    findOne.mockResolvedValue(null);
+
+    await expect(service.remove('missing')).rejects.toMatchObject({
+      status: 404,
+    });
+
+    expect(remove).not.toHaveBeenCalled();
   });
 });

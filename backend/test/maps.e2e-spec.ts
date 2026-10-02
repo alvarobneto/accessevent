@@ -62,6 +62,11 @@ function createRepositoryMocks() {
       else maps.push(row);
       return row as MapEntity;
     },
+    async remove(entity: MapEntity) {
+      const index = maps.findIndex((row) => row.id === entity.id);
+      if (index >= 0) maps.splice(index, 1);
+      return entity;
+    },
   };
 
   const eventsRepository = {
@@ -150,6 +155,70 @@ describe('/events/:eventId/maps e /maps/:mapId (e2e)', () => {
 
     expect(renamed.body.name).toBe('Térreo — pavilhão A');
     expect(renamed.body.eventId).toBe(EXISTING_EVENT_ID);
+  });
+
+  it('apaga uma navegação e devolve 204 sem corpo', async () => {
+    const created = await request(app.getHttpServer())
+      .post(`/events/${EXISTING_EVENT_ID}/maps`)
+      .send({ name: 'Térreo' })
+      .expect(201);
+
+    const response = await request(app.getHttpServer())
+      .delete(`/maps/${created.body.id}`)
+      .expect(204);
+
+    expect(response.text).toBe('');
+    expect(maps).toHaveLength(0);
+
+    await request(app.getHttpServer())
+      .get(`/maps/${created.body.id}`)
+      .expect(404);
+  });
+
+  it('mantém as outras navegações do evento ao apagar uma', async () => {
+    const removed = await request(app.getHttpServer())
+      .post(`/events/${EXISTING_EVENT_ID}/maps`)
+      .send({ name: 'Térreo' })
+      .expect(201);
+    const kept = await request(app.getHttpServer())
+      .post(`/events/${EXISTING_EVENT_ID}/maps`)
+      .send({ name: 'Primeiro andar' })
+      .expect(201);
+
+    await request(app.getHttpServer())
+      .delete(`/maps/${removed.body.id}`)
+      .expect(204);
+
+    const listed = await request(app.getHttpServer())
+      .get(`/events/${EXISTING_EVENT_ID}/maps`)
+      .expect(200);
+
+    expect(listed.body.map((map: { name: string }) => map.name)).toEqual([
+      'Primeiro andar',
+    ]);
+    expect(kept.body.id).toBeDefined();
+  });
+
+  it('devolve 404 ao apagar navegação inexistente', async () => {
+    await request(app.getHttpServer())
+      .delete('/maps/00000000-0000-0000-0000-000000000000')
+      .expect(404)
+      .expect(({ body }) => {
+        expect(body.message).toBe('Navegação não encontrada.');
+      });
+
+    expect(maps).toHaveLength(0);
+  });
+
+  it('devolve 400 e não 500 ao apagar navegação com id que não é UUID', async () => {
+    await request(app.getHttpServer())
+      .delete('/maps/nao-e-um-uuid')
+      .expect(400)
+      .expect(({ body }) => {
+        expect(body.message).toBe(
+          'Identificador inválido. Informe um UUID válido.',
+        );
+      });
   });
 
   it('devolve 404 ao criar navegação em evento inexistente', async () => {

@@ -1,6 +1,7 @@
 import {
   Body,
   Controller,
+  Delete,
   Get,
   HttpCode,
   HttpStatus,
@@ -44,5 +45,14 @@ export class EventsController {
     @Body() dto: UpdateEventDto,
   ): Promise<EventResponse> {
     return this.events.update(eventId, dto);
+  }
+
+  /** `204` sem corpo: apagado é sucesso, e não existe evento para devolver. */
+  @Delete(':eventId')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  async remove(
+    @Param('eventId', ParseUuidPipe()) eventId: string,
+  ): Promise<void> {
+    await this.events.remove(eventId);
   }
 }
