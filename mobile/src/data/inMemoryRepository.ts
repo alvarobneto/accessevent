@@ -65,6 +65,21 @@ export function createInMemoryRepository(): AppRepository {
       return event;
     },
 
+    async deleteEvent(eventId) {
+      const index = events.findIndex((event) => event.id === eventId);
+
+      if (index < 0) {
+        throw new Error('Não foi possível apagar: o evento não existe mais.');
+      }
+
+      events.splice(index, 1);
+
+      // Espelha o `ON DELETE CASCADE` do banco: as navegações do evento vão junto.
+      const kept = navigationMaps.filter((map) => map.eventId !== eventId);
+      navigationMaps.length = 0;
+      navigationMaps.push(...kept);
+    },
+
     async listNavigationMaps(eventId: string) {
       return navigationMaps.filter((map) => map.eventId === eventId);
     },
@@ -100,6 +115,16 @@ export function createInMemoryRepository(): AppRepository {
       map.name = name.trim();
       map.updatedAt = now();
       return map;
+    },
+
+    async deleteNavigationMap(mapId) {
+      const index = navigationMaps.findIndex((map) => map.id === mapId);
+
+      if (index < 0) {
+        throw new Error('Não foi possível apagar: a navegação não existe mais.');
+      }
+
+      navigationMaps.splice(index, 1);
     },
   };
 }

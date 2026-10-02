@@ -28,9 +28,12 @@ export interface AppRepository {
   createEvent(input: NewEvent): Promise<Event>;
   getEvent(eventId: string): Promise<Event | null>;
   updateEvent(eventId: string, changes: EventChanges): Promise<Event>;
+  /** `DELETE /events/:eventId`: apaga o evento e as navegações dele. */
+  deleteEvent(eventId: string): Promise<void>;
 
   listNavigationMaps(eventId: string): Promise<NavigationMap[]>;
   createNavigationMap(input: NewNavigationMap): Promise<NavigationMap>;
   getNavigationMap(mapId: string): Promise<NavigationMap | null>;
   renameNavigationMap(mapId: string, name: string): Promise<NavigationMap>;
+  deleteNavigationMap(mapId: string): Promise<void>;
 }

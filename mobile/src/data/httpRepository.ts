@@ -10,6 +10,7 @@ import type { Event, NavigationMap } from './types';
  * quando o registro não existe, então os `get*` convertem para `null`; e o
  * corpo do `POST /events` é enviado sem chaves `undefined`, porque a API
  * rejeita com `400` qualquer campo fora do contrato (`forbidNonWhitelisted`).
+ * Os `delete*` não têm retorno porque o `DELETE` responde `204` sem corpo.
  */
 function isNotFound(error: unknown): boolean {
   return error instanceof ApiError && error.status === 404;
@@ -45,6 +46,10 @@ export function createHttpRepository(): AppRepository {
       return api.patch<Event>(`/events/${eventId}`, compact(changes));
     },
 
+    async deleteEvent(eventId) {
+      await api.delete<void>(`/events/${eventId}`);
+    },
+
     async listNavigationMaps(eventId) {
       return api.get<NavigationMap[]>(`/events/${eventId}/maps`);
     },
@@ -64,6 +69,10 @@ export function createHttpRepository(): AppRepository {
 
     async renameNavigationMap(mapId, name) {
       return api.patch<NavigationMap>(`/maps/${mapId}`, { name });
+    },
+
+    async deleteNavigationMap(mapId) {
+      await api.delete<void>(`/maps/${mapId}`);
     },
   };
 }
