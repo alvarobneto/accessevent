@@ -46,6 +46,7 @@
           "cameraPermission": "O AccessEvent usa a câmera para ler os QR Codes que identificam pontos do mapa do evento."
         }
       ],
+      ["react-native-maps", {}],
       "expo-router",
       "expo-status-bar",
       "expo-font"
