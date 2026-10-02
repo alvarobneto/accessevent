@@ -7,11 +7,19 @@ import { Section } from '@/components/section';
 import { Card, EmptyState, Icon, ListRow } from '@/components/ui';
 import { repository } from '@/data';
 import { useAsyncData } from '@/hooks/useAsyncData';
+import { useRefreshOnFocus } from '@/hooks/useRefreshOnFocus';
 import { colors } from '@/theme/tokens';
 
-/** Lista de eventos disponíveis para consulta. */
+/**
+ * Lista de eventos disponíveis para consulta.
+ *
+ * Recarrega no foco pelo mesmo motivo da lista do organizador: quem apaga um evento
+ * volta para cá e precisa ver a lista já sem ele.
+ */
 export default function UserEventsScreen() {
   const { state, reload } = useAsyncData(() => repository.listEvents());
+
+  useRefreshOnFocus(reload);
 
   return (
     <Screen scrollable testID="user-events-screen">

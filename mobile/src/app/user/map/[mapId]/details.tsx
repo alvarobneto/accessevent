@@ -6,17 +6,23 @@ import { Screen } from '@/components/screen';
 import { Button, EmptyState } from '@/components/ui';
 import { repository } from '@/data';
 import { useAsyncData } from '@/hooks/useAsyncData';
+import { useRefreshOnFocus } from '@/hooks/useRefreshOnFocus';
 
 /**
  * Detalhes do mapa, em modo de consulta. Irmã de `/user/map/[mapId]`, que é a
  * tela do mapa em si: por isso o caminho é `/user/map/[mapId]/details` e não
  * aninhado no evento, como no organizador.
+ *
+ * Recarrega no foco porque o organizador renomeia a navegação em outra tela do
+ * app: o título e a data de atualização ficariam presas ao momento da abertura.
  */
 export default function UserMapDetailsScreen() {
   const { mapId } = useLocalSearchParams<{ mapId: string }>();
   const id = mapId ?? '';
 
   const map = useAsyncData(() => repository.getNavigationMap(id), id);
+
+  useRefreshOnFocus(map.reload);
 
   return (
     <>

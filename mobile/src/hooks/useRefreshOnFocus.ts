@@ -4,9 +4,12 @@ import { useFocusEffect } from 'expo-router';
 /**
  * Recarrega os dados quando a tela volta a ficar em foco.
  *
- * É o que mantém "Gerenciar evento" coerente depois de uma edição: o app navega
- * de volta com `router.back()`, a tela não é remontada e, sem isto, continuaria
- * mostrando o evento antigo.
+ * É o que mantém a tela coerente depois de uma escrita feita em outra tela: o app
+ * navega de volta com `router.back()`, `router.dismissTo` ou `router.replace`, a
+ * tela não é remontada e, sem isto, continuaria mostrando o snapshot da
+ * montagem. Vale para as listas (um evento criado ou apagado em outro lugar) e
+ * para as telas de detalhes (o editor de evento ou de título é alcançado a partir
+ * delas).
  *
  * O primeiro foco é ignorado de propósito — ele é o carregamento inicial, que o
  * `useAsyncData` já faz. O callback fica numa ref para que a identidade do

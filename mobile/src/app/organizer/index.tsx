@@ -7,11 +7,21 @@ import { Section } from '@/components/section';
 import { Button, Card, Icon, ListRow, Text } from '@/components/ui';
 import { repository } from '@/data';
 import { useAsyncData } from '@/hooks/useAsyncData';
+import { useRefreshOnFocus } from '@/hooks/useRefreshOnFocus';
 import { colors } from '@/theme/tokens';
 
-/** Área do organizador: os eventos cadastrados e o atalho para criar um novo. */
+/**
+ * Área do organizador: os eventos cadastrados e o atalho para criar um novo.
+ *
+ * A lista recarrega quando volta a ficar em foco. Sem isso, criar ou apagar um
+ * evento deixava a lista velha: `useAsyncData` carrega na montagem e uma tela de
+ * pilha não é remontada ao voltar, então o `router.back()` da edição e o
+ * `dismissTo` do apagado devolviam para a mesma lista com o snapshot antigo.
+ */
 export default function OrganizerEventsScreen() {
   const { state, reload } = useAsyncData(() => repository.listEvents());
+
+  useRefreshOnFocus(reload);
 
   return (
     <Screen scrollable testID="organizer-events-screen">

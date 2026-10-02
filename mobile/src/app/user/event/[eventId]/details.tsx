@@ -6,17 +6,23 @@ import { Screen } from '@/components/screen';
 import { Button, EmptyState } from '@/components/ui';
 import { repository } from '@/data';
 import { useAsyncData } from '@/hooks/useAsyncData';
+import { useRefreshOnFocus } from '@/hooks/useRefreshOnFocus';
 
 /**
  * Detalhes do evento, em modo de consulta. Mostra os mesmos dados da tela
  * equivalente do organizador (`EventDetailsView`); o que muda é que aqui não há
  * edição, então nem o cabeçalho ganha menu.
+ *
+ * Recarrega no foco porque o organizador edita o evento em outra tela do app: sem
+ * isto, os dados ficariam presos ao que era quando a tela abriu.
  */
 export default function UserEventDetailsScreen() {
   const { eventId } = useLocalSearchParams<{ eventId: string }>();
   const id = eventId ?? '';
 
   const event = useAsyncData(() => repository.getEvent(id), id);
+
+  useRefreshOnFocus(event.reload);
 
   return (
     <>

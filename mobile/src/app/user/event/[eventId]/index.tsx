@@ -8,6 +8,7 @@ import { Section } from '@/components/section';
 import { Button, EmptyState, Icon, ListRow, Text } from '@/components/ui';
 import { repository } from '@/data';
 import { useAsyncData } from '@/hooks/useAsyncData';
+import { useRefreshOnFocus } from '@/hooks/useRefreshOnFocus';
 import { colors } from '@/theme/tokens';
 
 /**
@@ -15,6 +16,9 @@ import { colors } from '@/theme/tokens';
  *
  * A tela é a lista; os dados do evento ficam em `/user/event/[eventId]/details`,
  * atrás do menu de três pontinhos, pelo mesmo combinado do organizador.
+ *
+ * Recarrega no foco para refletir navegações criadas ou apagadas pelo organizador
+ * depois que esta tela foi aberta.
  */
 export default function UserEventScreen() {
   const { eventId } = useLocalSearchParams<{ eventId: string }>();
@@ -22,6 +26,11 @@ export default function UserEventScreen() {
 
   const event = useAsyncData(() => repository.getEvent(id), id);
   const maps = useAsyncData(() => repository.listNavigationMaps(id), id);
+
+  useRefreshOnFocus(() => {
+    event.reload();
+    maps.reload();
+  });
 
   const eventName = event.state.status === 'success' ? event.state.data?.name : null;
 
