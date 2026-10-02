@@ -2,6 +2,7 @@ import { Stack, router, useLocalSearchParams } from 'expo-router';
 import { View } from 'react-native';
 
 import { AsyncContent } from '@/components/async-content';
+import { EventMap } from '@/components/map';
 import { NavigationMenu } from '@/components/navigation-menu';
 import { Screen } from '@/components/screen';
 import { Section } from '@/components/section';
@@ -12,13 +13,16 @@ import { useRefreshOnFocus } from '@/hooks/useRefreshOnFocus';
 import { colors } from '@/theme/tokens';
 
 /**
- * Gerenciar Navegação: o que existe nesta navegação e o que ainda vai existir.
+ * Gerenciar Navegação: o mapa e o que ainda vai existir nele.
  *
  * É o destino do item da lista de navegações do evento, e o editor fica a um
  * toque de distância pelo menu de três pontinhos — o mesmo combinado do evento: o
  * item da lista abre a coisa, o menu é quem edita. Pelo mesmo motivo os dados da
  * navegação (nome, datas) não aparecem aqui: eles têm tela própria, atrás de
  * "Ver detalhes".
+ *
+ * O mapa em si é o `EventMap`, desenhado na Sprint 3; os pontos, os caminhos e as
+ * áreas chegam nas Sprints 5 a 8.
  */
 export default function ManageNavigationMapScreen() {
   const { eventId, mapId } = useLocalSearchParams<{ eventId: string; mapId: string }>();
@@ -46,6 +50,16 @@ export default function ManageNavigationMapScreen() {
           {(data) =>
             data ? (
               <>
+                <View className="gap-2">
+                  <EventMap
+                    className="h-72 rounded-lg border border-border"
+                    accessibilityLabel="Mapa da navegação"
+                  />
+                  <Text variant="caption">
+                    O mapa é desenhado a partir dos caminhos que você percorre no local.
+                  </Text>
+                </View>
+
                 <Section
                   title="O que vem a seguir"
                   description="A navegação pode ser renomeada a qualquer momento pelo menu acima."
@@ -62,9 +76,9 @@ export default function ManageNavigationMapScreen() {
                       description="Os caminhos que ligam os pontos, com largura, rampas e presença de escadas."
                     />
                     <UpcomingItem
-                      icon="map-outline"
-                      title="Mapa"
-                      description="Desenho do espaço com a posição de cada ponto e das áreas."
+                      icon="map-marker-path"
+                      title="Percorrer o local"
+                      description="Acompanhar o caminho a pé e registrar o trajeto no mapa."
                     />
                   </Card>
                 </Section>
@@ -92,7 +106,7 @@ export default function ManageNavigationMapScreen() {
 }
 
 type UpcomingItemProps = {
-  icon: 'map-marker-multiple-outline' | 'vector-polyline' | 'map-outline';
+  icon: 'map-marker-multiple-outline' | 'vector-polyline' | 'map-marker-path';
   title: string;
   description: string;
 };
