@@ -50,6 +50,8 @@ src/
 │   └── diagnostics.tsx # Sprint 0 (fora do fluxo, acessado por deep link)
 ├── components/     # camada de UI compartilhada
 │   ├── ui/         # primitivos (Button, Card, Input, DateField, Menu, Alert, Dialog, Text, Icon…)
+│   ├── map/        # EventMap: base do mapa, marcadores e trajetos
+│   ├── delete-action.tsx # apagar evento/navegação com confirmação (só organizador)
 │   ├── screen.tsx    # shell com SafeArea + scroll opcional
 │   ├── section.tsx   # título + ação de seção
 │   └── async-content.tsx # estados loading/error/empty de listas
@@ -58,8 +60,8 @@ src/
 ├── hooks/          # reusable data/logic hooks
 ├── services/       # API client, health, location
 ├── theme/          # design tokens em JS (fonte de verdade) + tipos
-├── types/          # shared types that do not belong to data/
-└── utils/          # formatting and error helpers
+├── types/          # shared types that do not belong to data/ (coordinates, map)
+└── utils/          # formatting, error and geometry helpers
 ```
 
 User-facing strings are pt-BR; identifiers are English. The app's own UI must stay accessible
@@ -164,6 +166,12 @@ contrastes está em `src/theme/tokens.js`.
   que é o `MenuView` do `@expo/ui`). Isso vale para eventos e para navegações, e vale para os dois
   lados: nenhum item de lista abre direto no editor. Editar dado direto da lista mostrava um editor
   sem contexto e escondia o resto do que a tela mostra.
+- **Tela que mostra dado que outra tela escreve recarrega no foco.** Uma tela de pilha do Expo
+  Router não é remontada ao voltar, então `useAsyncData` — que carrega na montagem — continuaria
+  exibindo o snapshot antigo. Toda tela que exibe uma lista ou um registro mutável de outra tela
+  chama `useRefreshOnFocus` de `src/hooks/`: é o que faz o evento criado ou apagado aparecer e sumir
+  na lista, e o que faz a tela de detalhes mostrar o título novo depois de uma edição. Sem isso o
+  usuário contornava indo até a tela de escolha de modo, que monta a seção do zero.
 - **A tela do dia a dia não mostra os dados da coisa; os dados têm tela própria.** Evento e
   navegação seguem a mesma forma: descrição, período e datas vão para `/details`, e a tela que o
   item da lista abriu fica com o que a coisa _é_ (as navegações de um evento, o mapa de uma
@@ -179,6 +187,15 @@ contrastes está em `src/theme/tokens.js`.
   pelo Expo Router só aceita template com prefixo literal; extrair o caminho para uma variável o
   vira `string` e o `typecheck` recusa. Por isso os menus montam o ternário do modo dentro do
   `onSelect`.
+- **Ação irreversível mora no corpo da tela, não no menu.** Apagar evento e apagar navegação usam o
+  `DeleteAction` (`src/components/delete-action.tsx`), que fica no fim da tela de detalhes do
+  organizador. O menu de três pontinhos é para o que se refaz; apagar não se refaz, e item de menu
+  fica a um toque de distância das ações do dia a dia. O `DeleteAction` sempre confirma em `Dialog`
+  destrutivo repetindo o nome do registro, bloqueia o fechamento enquanto o pedido está em voo e
+  mostra o erro da API dentro do diálogo em vez de sumir com a tela. Depois do sucesso a navegação é
+  `router.dismissTo(...)` para a lista — nunca `replace`, que deixaria a tela do registro apagado
+  na pilha. O repositório em memória apaga a navegação junto com o evento, espelhando o
+  `ON DELETE CASCADE` do Postgres.
 
 ## Navigation map (Sprint 1)
 
@@ -190,13 +207,13 @@ contrastes está em `src/theme/tokens.js`.
 /organizer/event/[eventId]/details      Detalhes do evento (descrição, período, criado/atualizado em)
 /organizer/event/[eventId]/edit         Editar evento
 /organizer/event/[eventId]/map/new      Criar navegação
-/organizer/event/[eventId]/map/[mapId]  Gerenciar navegação (o que vem a seguir; mapa e POIs nas Sprints 3, 5 a 8)
+/organizer/event/[eventId]/map/[mapId]  Gerenciar navegação: o mapa desenhado + o que vem a seguir
 /organizer/event/[eventId]/map/[mapId]/details  Detalhes da navegação (criada/atualizada em)
-/organizer/map/[mapId]                  Editar navegação (título; mapa e POIs nas Sprints 3, 5 a 8)
+/organizer/map/[mapId]                  Editar navegação (título; caminhos e pontos nas Sprints 5 a 8)
 /user                    Eventos para consulta
 /user/event/[eventId]      Navegações do evento
 /user/event/[eventId]/details  Detalhes do evento (mesmos dados, sem edição)
-/user/map/[mapId]          Mapa da navegação
+/user/map/[mapId]          Mapa da navegação (o EventMap; caminhos e pontos nas Sprints 5 a 8)
 /user/map/[mapId]/details  Detalhes do mapa
 /diagnostics             Sprint 0: health do backend + permissão de localização (deep link)
 ```
@@ -206,11 +223,61 @@ Detalhes da navegação é aninhado no evento no organizador porque a tela da na
 evento no caminho, então os detalhes são `/user/map/[mapId]/details`. A regra é a mesma: fica do
 lado da tela que descreve.
 
+## Mapa
+
+`react-native-maps` é o mapa do app, e o PRD §24 é quem fixa a biblioteca — o `expo-maps`, que o
+Expo também mantém, fica de fora. `src/components/map/event-map.tsx` é o **único** arquivo do app
+que importa `react-native-maps`: as telas passam marcadores e polilinhas e não tocam em
+coordenada, provider ou câmera. Marcador e polilinha são os tipos de `src/types/map.ts`, que já
+falam o idioma do banco (`PointOfInterest.position` e `Path.geometry`, PRD §23).
+
+### Sistema de coordenadas
+
+- **WGS84 em graus decimais** em todo o projeto: da leitura do `expo-location` até o
+  `Path.geometry` gravado no Postgres, que é JSON puro — o que o PRD §25 permite para o MVP, e sem
+  PostGIS. A mesma forma vale no banco, na API e no app, então não existe conversão por camadas.
+- Duas formas com nomes diferentes de propósito: `Coordinates` (`src/types/coordinates.ts`) é a
+  leitura do GPS, com `accuracy`; `Coordinate`, o par `[latitude, longitude]`, é o que se grava e
+  se desenha. `toLatLng` em `src/utils/geo.ts` é a **única** conversão para o objeto
+  `{latitude, longitude}` que o `react-native-maps` consome.
+- `MapGeometry` é a lista de coordenadas em ordem, e é o formato que a API devolve e que o
+  `Path.geometry` grava. Não invente um terceiro formato de coordenada para um caso novo.
+- `regionForGeometry` enquadra tudo com 0,003° de folga e piso de 0,002° (≈220 m): um mapa de
+  pavilhão quase sempre tem um único ponto, e sem o piso o mapa abriria no zoom do planeta.
+  `regionForCoordinate` é a câmera fixa que acompanha quem percorre o local (Sprint 4).
+- `isValidCoordinate` fica na borda do desenho, não espalhado pelas telas: geo do dispositivo,
+  resposta da API e trajetória gravada chegam por caminhos diferentes, e coordenada fora da faixa
+  jogaria o mapa para um ponto impossível em vez de ser ignorada.
+
+### O componente
+
+- `EventMap` reenquadra a câmera **só quando o conteúdo muda** (`describeContent`), nunca a cada
+  render: um array novo com o mesmo conteúdo não tira o mapa da mão de quem está arrastando. Com o
+  mapa vazio ele não inventa câmera — quem passa o `initialRegion` é a tela.
+- `userLocation` e `followUserLocation` existem para a gravação de caminho da Sprint 4 e para o
+  "você está aqui" do participante. A permissão é pedida pela tela, nunca pelo componente.
+- `MapPin` desenha um disco com anel branco em vez do pino do sistema: os pinos nativos (Apple
+  Maps e Google Maps) têm formato, cor e tamanho diferentes, e o `design.md` pede consistência
+  entre plataformas. As três cores de tom (`default`, `highlight`, `muted`) saem de
+  `src/theme/tokens.js` e fecham 3:1 ou mais contra o desenho claro do mapa.
+- `tracksViewChanges={false}` no marcador: o pino é estático, e sem isso o Android redesenha o
+  marcador a cada quadro. Se o pino ganhar estado (seleção na Sprint 6), essa prop volta a ser
+  `true`.
+- Giro e inclinação desligados: o mapa de um local interno é lido de cima, e a rotação da cena é o
+  tipo de movimento que mais causa desconforto (RNF04). Zoom e arraste continuam liberados.
+
+### Provider
+
+`app.json` registra `["react-native-maps", {}]`, sem chave: o app usa **Apple Maps no iOS e Google
+Maps no Android**, que não pedem chave, e o plugin sem chave não altera nada no projeto nativo.
+`PROVIDER_GOOGLE` no `MapView` e as chaves `iosGoogleMapsApiKey`/`androidGoogleMapsApiKey` do
+plugin só entram na publicação em loja, com a chave do Google Cloud, e exigem build novo.
+
 ## Data layer
 
 `src/data/repository.ts` define `AppRepository` (async: `listEvents`, `createEvent`, `getEvent`,
-`updateEvent`, `listNavigationMaps`, `createNavigationMap`, `getNavigationMap`,
-`renameNavigationMap`). O singleton exportado por `src/data/index.ts` escolhe a implementação por
+`updateEvent`, `deleteEvent`, `listNavigationMaps`, `createNavigationMap`, `getNavigationMap`,
+`renameNavigationMap`, `deleteNavigationMap`). O singleton exportado por `src/data/index.ts` escolhe a implementação por
 `EXPO_PUBLIC_DATA_SOURCE`:
 
 - `api` (padrão) → `createHttpRepository()`, que fala com o NestJS em `EXPO_PUBLIC_API_URL`.
@@ -244,6 +311,11 @@ Accessibility data is organizer-reported: never present a route as "safe" or "id
   são importados, por subpath, para não embarcar os 18 arquivos da família no bundle.
 - `@react-native-async-storage/async-storage` — removed. The prototype must not persist anything;
   it comes back in RNF05 behind `src/data/` when recorded paths need to survive app restarts.
+- `react-native-maps` — o mapa do app, o `EventMap` de `src/components/map/`. Já estava instalado
+  desde a Sprint 0, e é o que o PRD §24 fixa, então não é uma escolha nova: o `expo-maps`, também
+  oficial do Expo, fica de fora porque a fonte de verdade das tecnologias é o PRD. Traz config
+  plugin, declarado em `app.json` sem chave — Apple Maps no iOS e Google Maps no Android não pedem
+  chave. Ver a seção **Mapa**.
 - `@expo/ui` — pacote oficial do Expo, usado em dois primitivos de `src/components/ui/`, que são
   componentes nativos e não JavaScript:
   - `@expo/ui/community/datetime-picker` no `DateField` — `DateTimePicker` com a API do

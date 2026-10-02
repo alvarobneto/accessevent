@@ -115,11 +115,47 @@ Ao final desta fase:
 
 ### Sprint 3 — Exibição do mapa
 
-* [ ] Integrar `react-native-maps` ao Expo.
-* [ ] Criar componente `EventMap`.
-* [ ] Renderizar marcadores.
-* [ ] Renderizar linhas/polilinhas.
-* [ ] Definir sistema de coordenadas.
+* [x] Integrar `react-native-maps` ao Expo.
+* [x] Criar componente `EventMap`.
+* [x] Renderizar marcadores.
+* [x] Renderizar linhas/polilinhas.
+* [x] Definir sistema de coordenadas.
+
+**Entregue além da lista, e verificado:**
+
+- [x] Sistema de coordenadas fechado: WGS84 em graus decimais, o mesmo do `expo-location` até o
+      `Path.geometry` gravado como JSON (PRD §25, sem PostGIS). `Coordinates` (leitura do GPS) e
+      `Coordinate` (`[latitude, longitude]`, o que se grava e se desenha) são tipos distintos, e
+      `toLatLng` em `mobile/src/utils/geo.ts` é a única conversão para o `react-native-maps`.
+- [x] `EventMap` é o único arquivo do app que importa `react-native-maps`; as telas do organizador
+      e do participante passam a desenhar o mapa de verdade.
+- [x] Enquadramento por conteúdo, com piso de 220 m e 48 px de folga: mapa de pavilhão tem poucos
+      pontos e não pode abrir no zoom do planeta. A câmera só se move quando o conteúdo muda, nunca
+      a cada render, para não tirar o mapa da mão de quem está arrastando.
+- [x] Pino do marcador desenhado pelo app (disco com anel branco) em vez do pino do sistema, para
+      o marcador não mudar de forma e cor entre plataformas; giro e inclinação desligados pela
+      acessibilidade (RNF04), zoom e arraste mantidos.
+- [x] Config plugin `react-native-maps` registrado em `app.json` sem chave: Apple Maps no iOS e
+      Google Maps no Android. `PROVIDER_GOOGLE` e as chaves ficam para a publicação em loja.
+- [x] Lint, typecheck e formatação limpos no mobile.
+
+**Fora desta sprint, por decisão de escopo:** não há `Path` nem `PointOfInterest` no repositório até
+as Sprints 5 e 7, então as telas de mapa mostram a base do mapa ainda sem marcadores nem
+polilinhas — nada de geometria fictícia foi semeada para a demo. O desenho entra em uso quando o
+primeiro caminho gravado chegar.
+
+**Ajuste de escopo pedido durante a sprint, fechado no PRD §20:** o CRUD de evento e de navegação
+ganhou o apagado, que não estava no plano. `DELETE /events/:eventId` e `DELETE /maps/:mapId`
+respondem `204` sem corpo e `404` com a mensagem pt-BR quando o registro não existe; apagar o evento
+leva as navegações junto pelo `ON DELETE CASCADE` que já existia na migração. No app, a ação fica no
+corpo da tela "Ver detalhes" do organizador (`DeleteAction`), com diálogo de confirmação que repete o
+nome do registro, e some depois de apagar com `router.dismissTo` para a lista. O participante não vê a
+ação.
+
+**Correção de navegação:** as listas e as telas de-details recarregam quando voltam a ficar em foco
+(`useRefreshOnFocus`). Sem isso o evento criado ou apagado só aparecia depois de passar pela tela de
+escolha de modo, porque uma tela de pilha não é remontada ao voltar e o `useAsyncData` carrega só na
+montagem.
 
 ### Sprint 4 — Gravação GPS
 
@@ -132,6 +168,11 @@ Ao final desta fase:
 * [ ] Retomar gravação.
 * [ ] Finalizar gravação.
 * [ ] Calcular distância aproximada.
+
+> **Ponto futuro relacionado:** a precisão da posição gravada está registrada em
+> **§11 — Pontos futuros**. O item de filtrar correções ruins por `accuracy` tem que entrar **antes**
+> da Sprint 5, porque depois que o ponto estiver gravado no `Path.geometry` ele já entra no cálculo de
+> rota como dado (Sprint 17).
 
 ### Sprint 5 — Persistência dos caminhos
 
@@ -642,3 +683,41 @@ Demonstrar
 ```
 
 A equipe deve evitar acumular várias funcionalidades parcialmente implementadas. O objetivo é manter o projeto sempre em um estado executável e demonstrável.
+
+---
+
+# 11. Pontos futuros
+
+Melhorias discutidas e **deixadas de fora de propósito** — não são pendências do MVP. Estão aqui
+para a decisão não se perder, não para entrar no backlog do MVP.
+
+## Precisão da localização (`expo-location`)
+
+Hoje `mobile/src/services/locationService.ts` pede `Location.Accuracy.High` nas duas leituras. O
+enum tem dois níveis acima dele: `Highest` e `BestForNavigation` ("o maior possível, usando dados
+adicionais de sensores para apps de navegação"). Subir o nível é a alavanca mais barata e custa
+bateria, então fica para quando houver gravação de verdade.
+
+O que **não** é alavanca é o `accuracy` pedido: o teto de precisão é definido pela **permissão
+concedida**, e é dela que vem quase todo o problema.
+
+- **iOS 14+** — `PermissionDetailsLocationIOS.accuracy` é `'full' | 'reduced'`. Em `'reduced'` a
+  posição é aproximada, e o iOS **não deixa o app perguntar de novo**: uma segunda
+  `requestForegroundPermissionsAsync` falha em silêncio e devolve `denied`. A única saída é levar a
+  pessoa aos Ajustes com `Linking.openSettings('app-settings:')`. Hoje `getLocationPermissionStatus`
+  já expõe `isPrecise`, mas nada no app oferece esse atalho.
+- **Android** — `PermissionDetailsLocationAndroid.accuracy` é `'fine' | 'coarse' | 'none'`, e
+  `coarse` dá precisão de cidade. `Location.enableNetworkProviderAsync()` pede à pessoa que ligue o
+  modo de alta precisão (Wi-Fi + rede + GPS); fica para a gravação em background, porque ele puxa
+  foreground service e notificação permanente.
+
+**O item que realmente importa** é filtrar por `coords.accuracy` antes de acrescentar o ponto ao
+`Path.geometry`. Num pavilhão o GPS degrada, e cada correção ruim gravada entra no cálculo de rota
+como dado — o Sprint 17 trata as arestas como dado, não como peso, então a sujeira fica. Descartar a
+correção é mais barato que qualquer configuração de precisão.
+
+**Limites que não são de software:** posicionamento interno de precisão exigiria beacon, UWB ou
+fingerprinting de Wi-Fi, e o PRD §5 põe beacon e posicionamento interno de alta precisão fora do
+MVP. O teto real do app é a qualidade do GPS/Wi-Fi do aparelho no local. E precisão só se avalia em
+aparelho físico: simulador e emulador devolvem posição sintética, e o `accuracy` de lá não significa
+nada.

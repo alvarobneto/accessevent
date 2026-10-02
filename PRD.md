@@ -636,11 +636,12 @@ O sistema deve permitir que um organizador crie uma conta.
 
 ## RF02 — Cadastro de evento
 
-O organizador deve conseguir criar eventos.
+O organizador deve conseguir criar, consultar, editar e apagar eventos. Apagar um evento apaga
+também as navegações registradas nele.
 
 ## RF03 — Criação de mapa
 
-O organizador deve conseguir criar um mapa associado ao evento.
+O organizador deve conseguir criar um mapa associado ao evento, renomeá-lo e apagá-lo.
 
 ## RF04 — Gravação de caminho
 
