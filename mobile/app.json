@@ -47,6 +47,14 @@
         }
       ],
       ["react-native-maps", {}],
+      [
+        "expo-build-properties",
+        {
+          "android": {
+            "usesCleartextTraffic": true
+          }
+        }
+      ],
       "expo-router",
       "expo-status-bar",
       "expo-font"
