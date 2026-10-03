@@ -1,8 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { StyleSheet, View } from 'react-native';
+import { Platform, StyleSheet, View } from 'react-native';
 import MapView, { Marker, Polyline } from 'react-native-maps';
 
 import { MapPin } from '@/components/map/map-pin';
+import { EmptyState } from '@/components/ui';
+import { hasGoogleMapsAndroidKey } from '@/config/env';
 import { tv } from '@/lib/tv';
 import { colors } from '@/theme/tokens';
 import type { Coordinate, Coordinates } from '@/types/coordinates';
@@ -24,6 +26,21 @@ const EDGE_PADDING = { top: 48, right: 48, bottom: 48, left: 48 };
 
 /** Duração da transição de câmera: uma das três que o `design.md` permite. */
 const CAMERA_DURATION = 250;
+
+/**
+ * Se o provedor de mapa pode ser montado.
+ *
+ * O Google Maps no Android exige `com.google.android.geo.API_KEY` no manifesto, e
+ * sem a chave o `react-native-maps` mata o processo: `MapsInitializer.initialize`
+ * lança na criação do `MapView` e a exceção sobe até o `main`. O iOS não passa
+ * por isso porque o provedor de lá é o Apple Maps, que não pede chave nenhuma.
+ *
+ * Sem chave, o `EventMap` não monta mapa — ele devolve o estado explícito de mapa
+ * indisponível e a tela sobrevive. O valor é constante durante a vida do processo
+ * (`Platform.OS` e uma variável embutida no build), por isso a guarda é uma
+ * fronteira de componente, e não um retorno no meio do corpo de `EventMap`.
+ */
+const isMapProviderAvailable = Platform.OS !== 'android' || hasGoogleMapsAndroidKey;
 
 export type EventMapProps = {
   /** Pontos a desenhar, os pontos de interesse do mapa. */
@@ -53,12 +70,49 @@ export type EventMapProps = {
  * polilinhas — o desenho já no formato do banco (`Path.geometry` e a posição dos
  * pontos, PRD §23) — e não tocam em coordenada, provider ou câmera.
  *
+ * A guarda do provedor mora aqui e não nas telas porque é o componente que sabe
+ * o que o `react-native-maps` exige: ver `isMapProviderAvailable`.
+ */
+export function EventMap(props: EventMapProps) {
+  if (!isMapProviderAvailable) {
+    return <UnavailableMap className={props.className} testID={props.testID} />;
+  }
+
+  return <DrawnMap {...props} />;
+}
+
+/**
+ * O estado de mapa indisponível, no lugar do mapa.
+ *
+ * Fica no mesmo contêiner e com o mesmo `testID` do mapa para a tela não mudar
+ * de tamanho nem de posição — quem olha vê o mesmo retângulo, com a explicação
+ * do que falta dentro dele.
+ */
+function UnavailableMap({ className, testID }: Pick<EventMapProps, 'className' | 'testID'>) {
+  return (
+    <View className={containerVariants({ className: className ?? 'flex-1' })} testID={testID}>
+      <View className="h-full w-full items-center justify-center bg-background p-4">
+        <EmptyState
+          compact
+          icon="map-marker-off-outline"
+          title="Mapa indisponível no Android"
+          description="O Google Maps precisa de uma chave da API configurada no app para desenhar o mapa. O resto da tela continua funcionando."
+        />
+      </View>
+    </View>
+  );
+}
+
+/**
+ * O mapa propriamente dito, separado do `EventMap` para que a guarda do provedor
+ * seja uma fronteira de componente e não um retorno no meio do corpo.
+ *
  * Enquadramento: o mapa abre mostrando todo o conteúdo e reenquadra quando o
  * conjunto muda, nunca a cada render. Com o mapa vazio, quem mostra a câmera é a
  * tela, não o componente: um `initialRegion` explícito, a localização de quem
  * está usando o app ou o `followUserLocation` da gravação.
  */
-export function EventMap({
+function DrawnMap({
   markers = [],
   polylines = [],
   userLocation,
