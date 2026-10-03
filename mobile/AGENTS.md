@@ -268,10 +268,75 @@ falam o idioma do banco (`PointOfInterest.position` e `Path.geometry`, PRD §23)
 
 ### Provider
 
-`app.json` registra `["react-native-maps", {}]`, sem chave: o app usa **Apple Maps no iOS e Google
-Maps no Android**, que não pedem chave, e o plugin sem chave não altera nada no projeto nativo.
-`PROVIDER_GOOGLE` no `MapView` e as chaves `iosGoogleMapsApiKey`/`androidGoogleMapsApiKey` do
-plugin só entram na publicação em loja, com a chave do Google Cloud, e exigem build novo.
+O app usa **Apple Maps no iOS e Google Maps no Android** — os dois são o padrão do
+`react-native-maps`, sem `PROVIDER_GOOGLE` no `MapView`.
+
+**O Google Maps no Android exige `com.google.android.geo.API_KEY`, e sem a chave o app morre.**
+Não é mapa em branco nem aviso: `MapsInitializer.initialize` lança
+`java.lang.RuntimeException: API key not found` na criação do `MapView`, a exceção sobe até o
+`main` e o processo morre. Confirmado em logcat no emulador, na abertura de
+`/user/map/[mapId]`:
+
+```
+E/AndroidRuntime: FATAL EXCEPTION: main
+java.lang.RuntimeException: API key not found.  Check that <meta-data android:name="com.google.android.geo.API_KEY" .../>
+	at com.google.android.gms.maps.MapsInitializer.initialize(...)
+	at com.rnmaps.fabric.MapViewManager.setGoogleRenderer(MapViewManager.java:268)
+```
+
+O iOS não passa por isso porque o Apple Maps não pede chave. Por isso o mapa funcionava no
+simulador iOS e quebrava só no Android — o mesmo `EventMap`, a mesma tela.
+
+- A chave vem de `EXPO_PUBLIC_GOOGLE_MAPS_ANDROID_API_KEY` no `.env` (ver `.env.example` para o
+  passo a passo no Google Cloud e para a restrição por pacote e SHA-1).
+- **`app.json` não dá conta de ler o `.env`**, então `app.config.ts` existe: ele recebe o `app.json`
+  resolvido e troca `["react-native-maps", {}]` por `["react-native-maps", { androidGoogleMapsApiKey }]`.
+  Sem essa chave no plugin, o `AndroidManifest.xml` gerado no `prebuild` não recebe o `meta-data` e
+  o app crasha no primeiro mapa. Trocar a chave exige `prebuild` + build novo — não dá para
+  atualizar por OTA.
+- **`PLACEHOLDER` é o valor enquanto não houver chave de verdade**, e ele nunca é injetado no
+  manifesto. Um placeholder que chegasse ao manifest faria o Google Maps aceitar a chave, montar o
+  mapa e desenhá-lo em branco, sem nenhuma pista do que falta — sem chave nenhuma o app nem chega a
+  montar, o que pelo menos deixa o log dizer o que falta.
+- **Por isso `EventMap` tem guarda em tempo de execução**: `isMapProviderAvailable` é
+  `Platform.OS !== 'android' || hasGoogleMapsAndroidKey`. Sem chave no Android, `EventMap` devolve
+  `UnavailableMap` — um `EmptyState` "Mapa indisponível no Android" no mesmo contêngulo e com o
+  mesmo `testID` do mapa, então a tela não muda de tamanho e o app continua vivo. A guarda é uma
+  **fronteira de componente** (`EventMap` escolhe entre `UnavailableMap` e `DrawnMap`), não um
+  retorno no meio do corpo: `rules-of-hooks` acusa o retorno antecipado, e com razão. O valor é
+  constante na vida do processo, mas a estrutura não depende disso.
+- A guarda vale para as duas telas que desenham mapa — `/user/map/[mapId]` e
+  `/organizer/event/[eventId]/map/[mapId]` — porque vive no `EventMap`, não na tela.
+
+### `android.usesCleartextTraffic` no `app.json` não faz nada — use o config plugin
+
+Em desenvolvimento `EXPO_PUBLIC_API_URL` aponta para `http://10.0.2.2:3333` (ou o IP LAN do host),
+e o Android bloqueia HTTP a partir da API 28. Sem liberar tráfego em claro o app nem chega a
+montar o `EventMap`: a tela mostra "Não foi possível carregar" / "Não foi possível conectar ao
+servidor" e o crash da chave some junto, o que faz o problema parecer outro.
+
+A armadilha: `android.usesCleartextTraffic` no `app.json` **sobrevive ao `expo config`** (aparece
+como `true` no JSON resolvido) mas o SDK 57 **não o aplica ao manifesto**. Só os manifestos de
+`debug` e `debugOptimized` recebem a flag; o de `release` não. Um build de release nasce sem
+cleartext, e como o `android/` é gitignored ninguém percebe o drift.
+
+Por isso a flag vem do plugin, e o `app.json` continua com a chave morta apenas como documentação
+do problema original (commit `c47e0c5`, que já previa o ajuste):
+
+```json
+["expo-build-properties", { "android": { "usesCleartextTraffic": true } }]
+```
+
+Depois de mexer nisso, `prebuild` sem `--clean` e confira o manifesto **de release**:
+
+```bash
+grep -o 'android:usesCleartextTraffic="[a-z]*"' android/app/src/main/AndroidManifest.xml
+```
+
+O mesmo plugin tem `android.buildArchs`, que sobrescreve `reactNativeArchitectures` no
+`gradle.properties` de forma que sobrevive ao `prebuild`. Para iteração local use
+`-PreactNativeArchitectures=arm64-v8a` na linha de comando; se virar permanente no `app.json`,
+os APKs de release passam a ser arm64-only e isso precisa ser uma decisão consciente.
 
 ## Data layer
 
@@ -314,8 +379,8 @@ Accessibility data is organizer-reported: never present a route as "safe" or "id
 - `react-native-maps` — o mapa do app, o `EventMap` de `src/components/map/`. Já estava instalado
   desde a Sprint 0, e é o que o PRD §24 fixa, então não é uma escolha nova: o `expo-maps`, também
   oficial do Expo, fica de fora porque a fonte de verdade das tecnologias é o PRD. Traz config
-  plugin, declarado em `app.json` sem chave — Apple Maps no iOS e Google Maps no Android não pedem
-  chave. Ver a seção **Mapa**.
+  plugin, declarado em `app.json`; a chave do Google Maps do Android entra pelo `app.config.ts`, que
+  a lê do `.env` — sem ela o Android crasha ao abrir qualquer mapa. Ver a seção **Mapa**.
 - `@expo/ui` — pacote oficial do Expo, usado em dois primitivos de `src/components/ui/`, que são
   componentes nativos e não JavaScript:
   - `@expo/ui/community/datetime-picker` no `DateField` — `DateTimePicker` com a API do
