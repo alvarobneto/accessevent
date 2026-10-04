@@ -46,6 +46,58 @@ export function toLatLng(coordinate: Coordinate): LatLng {
   return { latitude, longitude };
 }
 
+/** Raio médio da Terra em metros, o valor da fórmula haversine. */
+const EARTH_RADIUS_M = 6_371_000;
+
+/** Um metro em graus de latitude. Serve de tolerância para o zero arredondado. */
+const METERS_PER_DEGREE = 111_320;
+
+function toRadians(degrees: number): number {
+  return (degrees * Math.PI) / 180;
+}
+
+/**
+ * Distância em metros entre dois pontos, pela fórmula haversine.
+ *
+ * É a mesma aproximação que o `getDistanceBetween` do `expo-location` usa por
+ * baixo. A haversine é melhor que a equiretangular em distâncias longas e
+ * idêntica nas curtas, e a distância do caminho gravado é a soma dos trechos: o
+ * organizador percorre um pavilhão, não um círculo.
+ */
+export function distanceInMeters(from: Coordinate, to: Coordinate): number {
+  const [fromLatitude, fromLongitude] = from;
+  const [toLatitude, toLongitude] = to;
+
+  const latitudeDelta = toRadians(toLatitude - fromLatitude);
+  const longitudeDelta = toRadians(toLongitude - fromLongitude);
+  const fromLatitudeRad = toRadians(fromLatitude);
+  const toLatitudeRad = toRadians(toLatitude);
+
+  const haversine =
+    Math.sin(latitudeDelta / 2) * Math.sin(latitudeDelta / 2) +
+    Math.cos(fromLatitudeRad) *
+      Math.cos(toLatitudeRad) *
+      Math.sin(longitudeDelta / 2) *
+      Math.sin(longitudeDelta / 2);
+
+  return 2 * EARTH_RADIUS_M * Math.asin(Math.min(1, Math.sqrt(haversine)));
+}
+
+/**
+ * Distância em metros a partir de um deslocamento em graus.
+ *
+ * O `react-native-maps` entrega o ponto de câmera já em graus, e a distância entre
+ * a posição da pessoa e o centro do enquadramento é o que a câmera realmente
+ * percorreu: converter os dois para metros e medir em linha reta dá a mesma
+ * resposta da haversine para menos de um quilômetro, que é a escala do gravador.
+ */
+export function degreeDistanceInMeters(from: LatLng, to: LatLng): number {
+  const latitudeDelta = to.latitude - from.latitude;
+  const longitudeDelta = to.longitude - from.longitude;
+
+  return Math.hypot(latitudeDelta, longitudeDelta) * METERS_PER_DEGREE;
+}
+
 /**
  * Região que enquadra a geometria inteira, com folga nas bordas.
  *

@@ -17,11 +17,25 @@ npx expo install <package>  # ALWAYS use instead of npm/yarn/pnpm/bun add — re
 npx expo start              # start the dev server
 npx expo lint               # lint
 npx tsc --noEmit            # typecheck
+npm test                    # vitest run (src/**/*.spec.ts)
 npx expo-doctor             # diagnose dependency and config issues
 npx expo install --fix      # fix incompatible package versions
 ```
 
 Run lint and typecheck before declaring any task done.
+
+### Testes
+
+`vitest`, o mesmo runner do `backend`, com `globals: true` e `"types": ["vitest/globals"]` no
+`tsconfig.json`. O config é `vitest.config.mts` e usa `resolve.tsconfigPaths` — o Vite resolve
+os aliases do `tsconfig.json` nativamente, então o plugin `vite-tsconfig-paths` que o `backend`
+ainda usa não é necessário aqui.
+
+O recorte é `src/**/*.spec.ts`, e é só o que é TypeScript puro: `utils/` e `types/`. Componente,
+hook e tela dependem de React Native e do `expo-location`, e testá-los exigiria um ambiente de
+render que o MVP não tem. **O que é puro e com regra de negócio vai para `utils/` e ganha
+teste** — foi assim que os limiares do filtro de gravação ficaram em `utils/recording.ts` em vez
+de dentro do hook.
 
 ## Navigation & Routing
 
@@ -57,11 +71,11 @@ src/
 │   └── async-content.tsx # estados loading/error/empty de listas
 ├── config/         # env access — process.env must be read statically (expo/no-dynamic-env-var)
 ├── data/           # AppRepository + implementação em memória (types, repository, inMemoryRepository)
-├── hooks/          # reusable data/logic hooks
+├── hooks/          # reusable data/logic hooks (useAsyncData, useRefreshOnFocus, usePathRecording)
 ├── services/       # API client, health, location
 ├── theme/          # design tokens em JS (fonte de verdade) + tipos
 ├── types/          # shared types that do not belong to data/ (coordinates, map)
-└── utils/          # formatting, error and geometry helpers
+└── utils/          # formatting, error, geometry and recording helpers
 ```
 
 User-facing strings are pt-BR; identifiers are English. The app's own UI must stay accessible
@@ -207,7 +221,8 @@ contrastes está em `src/theme/tokens.js`.
 /organizer/event/[eventId]/details      Detalhes do evento (descrição, período, criado/atualizado em)
 /organizer/event/[eventId]/edit         Editar evento
 /organizer/event/[eventId]/map/new      Criar navegação
-/organizer/event/[eventId]/map/[mapId]  Gerenciar navegação: o mapa desenhado + o que vem a seguir
+/organizer/event/[eventId]/map/[mapId]  Gerenciar navegação: hub do mapa + "Mapear novo caminho"
+/organizer/event/[eventId]/map/[mapId]/record    Gravar um caminho novo (Sprint 4)
 /organizer/event/[eventId]/map/[mapId]/details  Detalhes da navegação (criada/atualizada em)
 /organizer/map/[mapId]                  Editar navegação (título; caminhos e pontos nas Sprints 5 a 8)
 /user                    Eventos para consulta
@@ -238,7 +253,9 @@ falam o idioma do banco (`PointOfInterest.position` e `Path.geometry`, PRD §23)
   PostGIS. A mesma forma vale no banco, na API e no app, então não existe conversão por camadas.
 - Duas formas com nomes diferentes de propósito: `Coordinates` (`src/types/coordinates.ts`) é a
   leitura do GPS, com `accuracy`; `Coordinate`, o par `[latitude, longitude]`, é o que se grava e
-  se desenha. `toLatLng` em `src/utils/geo.ts` é a **única** conversão para o objeto
+  se desenha. `LocationSample` é a leitura **com o instante** (`recordedAt`), que só a gravação
+  precisa — é a distância dividida pelo tempo que separa uma pessoa andando de um salto do
+  sensor. `toLatLng` em `src/utils/geo.ts` é a **única** conversão para o objeto
   `{latitude, longitude}` que o `react-native-maps` consome.
 - `MapGeometry` é a lista de coordenadas em ordem, e é o formato que a API devolve e que o
   `Path.geometry` grava. Não invente um terceiro formato de coordenada para um caso novo.
@@ -248,14 +265,30 @@ falam o idioma do banco (`PointOfInterest.position` e `Path.geometry`, PRD §23)
 - `isValidCoordinate` fica na borda do desenho, não espalhado pelas telas: geo do dispositivo,
   resposta da API e trajetória gravada chegam por caminhos diferentes, e coordenada fora da faixa
   jogaria o mapa para um ponto impossível em vez de ser ignorada.
+- `distanceInMeters` é a haversine, e a distância de um caminho gravado é a **soma dos trechos**:
+  o organizador percorre um pavilhão, não um círculo. `degreeDistanceInMeters` existe para a
+  câmera, que já chega em graus do `react-native-maps` e não passa por coordenada gravada.
 
 ### O componente
 
 - `EventMap` reenquadra a câmera **só quando o conteúdo muda** (`describeContent`), nunca a cada
   render: um array novo com o mesmo conteúdo não tira o mapa da mão de quem está arrastando. Com o
   mapa vazio ele não inventa câmera — quem passa o `initialRegion` é a tela.
-- `userLocation` e `followUserLocation` existem para a gravação de caminho da Sprint 4 e para o
-  "você está aqui" do participante. A permissão é pedida pela tela, nunca pelo componente.
+- **Quem dirige a câmera são dois jeitos, e eles não convivem.** Por padrão o componente
+  reenquadra o conteúdo, o que serve para um mapa salvo. Passando `cameraToFollow` — que só tem
+  efeito com `followUserLocation` — o reenquadramento automático é **desligado** e a câmera segue o
+  centro que a tela manda. Isso existe porque, durante a gravação, o trajeto cresce a cada leitura
+  e o `fitToCoordinates` puxaria a câmera para o centro do percurso a cada ponto: foi o que a
+  primeira versão do `followUserLocation` fez, dentro do componente, e o mapa não acompanha quem
+  está caminhando. A tela de gravação conduz o laço com `onCameraSettled`, que devolve o centro
+  depois que a câmera para de se mexer; ela realimenta com a posição do GPS e assim o
+  acompanhamento usa a mesma fórmula do `animateToRegion` do componente, sem o componente conhecer
+  a leitura do sensor.
+- O laço de animação tem tolerância de 1 m (`CAMERA_SETTLED_TOLERANCE_M`): a animação de 250 ms
+  nunca assenta exatamente no centro pedido, e realimentar o efeito a cada quadro seria um laço de
+  animações que não termina.
+- `userLocation` desenha o ponto nativo de quem autorizou a localização; `followUserLocation` é o
+  pedido de acompanhamento. A permissão é pedida pela tela, nunca pelo componente.
 - `MapPin` desenha um disco com anel branco em vez do pino do sistema: os pinos nativos (Apple
   Maps e Google Maps) têm formato, cor e tamanho diferentes, e o `design.md` pede consistência
   entre plataformas. As três cores de tom (`default`, `highlight`, `muted`) saem de
@@ -265,6 +298,44 @@ falam o idioma do banco (`PointOfInterest.position` e `Path.geometry`, PRD §23)
   `true`.
 - Giro e inclinação desligados: o mapa de um local interno é lido de cima, e a rotação da cena é o
   tipo de movimento que mais causa desconforto (RNF04). Zoom e arraste continuam liberados.
+
+## Gravação de caminho (Sprint 4)
+
+`/organizer/event/[eventId]/map/[mapId]/record` é uma rota própria, e não uma seção da tela da
+navegação: gravação é tarefa com início, acompanhamento e fim, e emaranhada no hub ela empurraria
+para baixo a lista de caminhos que a Sprint 5 traz. O hub (`map/[mapId]`) mostra o mapa e tem o
+botão "Mapear novo caminho"; a gravação vive na rota ao lado.
+
+- **A máquina de estado é `usePathRecording`** (`src/hooks/`): `idle` → `starting` → `recording` →
+  `finished`, com `start`, `finish` e `discard`. A tela desenha e não decide; o hook não desenha.
+- **A permissão é lida, não pedida e esquecida.** GPS desligado e permissão negada viram `issue`
+  em pt-BR na tela e a gravação não começa. `requestLocationPermission` volta o estado, e o
+  protótipo da Sprint 3 descartava esse retorno.
+- **Não há pausa.** Quem percorre um pavilhão não precisa pausar o trajeto — pausa o lugar, não a
+  caminhada — e a pausa criaria dois caminhos numa sessão. Interromper é `finish` ou `discard`.
+  A pausa que existia no protótipo era pior que inútil: parava o cronômetro e deixava o GPS
+  acrescentar ponto por baixo. Decisão registrada no PRD §9.2.
+- **O filtro de leitura mora em `src/utils/recording.ts`, não no hook**, e é pura para ter teste:
+  precisão acima de 30 m, espaçamento menor que 1 m e salto acima de 3 m/s entre pontos com 1 s ou
+  mais de intervalo. Os limiares são o que separa o trajeto do sensor do trajeto da pessoa, e eles
+  têm que entrar antes da Sprint 5 — depois que o ponto está no `Path.geometry` ele entra no
+  cálculo de rota como dado (Sprint 17). As regras estão no PRD §9.2.
+- **A distância mostrada é o comprimento do trajeto desenhado**, a soma dos trechos aceitos. Um
+  trecho de leitura descartado não entra: as leituras ruins em sequência são todas medidas contra o
+  mesmo último ponto aceito, e somá-las contaria o mesmo metro várias vezes.
+- **A referência do filtro de salto só troca quando o ponto é aceito.** Se passasse a ser o ponto
+  descartado, o passo seguinte pareceria outro teleporte e o trajeto nunca mais cresceria.
+- **Só com o app na frente.** A assinatura é do `expo-location` em primeiro plano, então sair
+  para outra tela interrompe a entrega de posição; a tela avisa isso. Background exigiria
+  foreground service com notificação permanente no Android e
+  `allowsBackgroundLocationUpdates` no iOS, e está fora do MVP (PRD §30).
+- **Nada na gravação toca a rede**, que é o que faz o RNF05 valer sem fila: perda temporária de
+  conexão não interrompe o mapeamento.
+- **`finalize` ainda não salva.** A tela diz isso em vez de fingir que gravou; a Sprint 5 troca o
+  aviso pelo `POST /paths`. O que ela já entrega é a `MapGeometry` e a distância em metros que o
+  `Path` vai gravar.
+- `watchPosition` põe o callback de erro **depois** do de posição porque é a assinatura que chama:
+  `watchPositionAsync(qualidades, callback, onError)`.
 
 ### Provider
 
@@ -366,6 +437,10 @@ Accessibility data is organizer-reported: never present a route as "safe" or "id
 - `react-native-reanimated` + `react-native-worklets` — peer requirements do NativeWind 4; animações
   de transição e de entrada de tela.
 - `react-native-safe-area-context` — área segura do `Screen` e dos headers.
+- `vitest` (dev) — teste do TypeScript puro de `src/utils/` e `src/types/`.
+  O `backend` já usa vitest, então é o mesmo runner e o mesmo `*.spec.ts` nos dois apps; o Expo
+  não traz runner de teste, e `jest-expo` puxaria ambiente de render que o MVP não precisa — o
+  que tem regra de negócio puro mora em `utils/` justamente para poder ser testado assim.
 - `babel-preset-expo` (dev) — precisa de `jsxImportSource: "nativewind"` para o Babel resolver
   `className`.
 - `prettier-plugin-tailwindcss` (dev) — ordena as classes no `npm run format`.

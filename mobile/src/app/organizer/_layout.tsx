@@ -38,6 +38,10 @@ export default function OrganizerLayout() {
       <Stack.Screen name="event/[eventId]/map/new" options={{ title: 'Nova navegação' }} />
       <Stack.Screen name="event/[eventId]/map/[mapId]" options={{ title: 'Gerenciar navegação' }} />
       <Stack.Screen
+        name="event/[eventId]/map/[mapId]/record"
+        options={{ title: 'Mapear novo caminho' }}
+      />
+      <Stack.Screen
         name="event/[eventId]/map/[mapId]/details"
         options={{ title: 'Detalhes da navegação' }}
       />

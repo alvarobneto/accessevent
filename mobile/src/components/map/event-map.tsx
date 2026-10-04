@@ -1,6 +1,6 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Platform, StyleSheet, View } from 'react-native';
-import MapView, { Marker, Polyline } from 'react-native-maps';
+import MapView, { Marker, Polyline, type Region } from 'react-native-maps';
 
 import { MapPin } from '@/components/map/map-pin';
 import { EmptyState } from '@/components/ui';
@@ -9,7 +9,13 @@ import { tv } from '@/lib/tv';
 import { colors } from '@/theme/tokens';
 import type { Coordinate, Coordinates } from '@/types/coordinates';
 import type { MapGeometry, MapMarker, MapPolyline, MapTone } from '@/types/map';
-import { isValidCoordinate, regionForCoordinate, regionForGeometry, toLatLng } from '@/utils/geo';
+import {
+  degreeDistanceInMeters,
+  isValidCoordinate,
+  regionForCoordinate,
+  regionForGeometry,
+  toLatLng,
+} from '@/utils/geo';
 
 /** Cor de cada tom. As três fecham 3:1 ou mais contra o desenho claro do mapa. */
 const TONE_COLORS: Record<MapTone, string> = {
@@ -26,6 +32,14 @@ const EDGE_PADDING = { top: 48, right: 48, bottom: 48, left: 48 };
 
 /** Duração da transição de câmera: uma das três que o `design.md` permite. */
 const CAMERA_DURATION = 250;
+
+/**
+ * Quanto a câmera pode andar sem que a tela seja avisada de novo, em metros.
+ *
+ * A animação de 250 ms nunca assenta exatamente no centro pedido, então realimentar
+ * o efeito a cada quadro seria um laço de animações que não termina.
+ */
+const CAMERA_SETTLED_TOLERANCE_M = 1;
 
 /**
  * Se o provedor de mapa pode ser montado.
@@ -53,10 +67,34 @@ export type EventMapProps = {
    */
   userLocation?: Coordinates | null;
   /**
-   * Mantém a câmera sobre a posição de quem está usando o app, a cada leitura do
-   * GPS. É o comportamento da gravação de caminho da Sprint 4.
+   * Mantém a câmera sobre a posição de quem está usando o app. É o comportamento
+   * da gravação de caminho da Sprint 4, e ele só vale com `cameraToFollow`: ver
+   * o comentário do componente sobre quem dirige a câmera.
    */
   followUserLocation?: boolean;
+  /**
+   * Centro da câmera que a tela quer seguir, em coordenadas gravadas.
+   *
+   * Quem passa isto dirige a câmera. O componente devolve o centro do
+   * enquadramento em `onCameraSettled`, e a tela o realimenta com a posição do
+   * GPS: assim o acompanhamento usa a mesma fórmula do `animateToRegion` do
+   * componente, e o `degreeDistanceInMeters` — que exige um `LatLng` — fica
+   * exercitado sem que o componente precise conhecer a leitura do sensor.
+   *
+   * A tela que acompanha o GPS também **é** quem enquadra o trajeto, por isso
+   * `onCameraSettled` não recebe o que a tela já pediu.
+   */
+  cameraToFollow?: Coordinate | null;
+  /** Notifica o centro do enquadramento quando a câmera para de se mexer. */
+  onCameraSettled?: (center: Coordinate) => void;
+  /**
+   * Ponto de onde a câmera começa, para quando o mapa abre sem conteúdo para
+   * enquadrar — a gravação de caminho, que ainda não tem trajeto.
+   *
+   * Usa a mesma fórmula do acompanhamento, e é a tela que passa o ponto para não
+   * duplicar `regionForCoordinate` fora daqui.
+   */
+  initialFocus?: Coordinate | null;
   /** Nome do mapa para o leitor de tela; o mapa é um gráfico, não um texto. */
   accessibilityLabel?: string;
   className?: string;
@@ -111,12 +149,23 @@ function UnavailableMap({ className, testID }: Pick<EventMapProps, 'className' |
  * conjunto muda, nunca a cada render. Com o mapa vazio, quem mostra a câmera é a
  * tela, não o componente: um `initialRegion` explícito, a localização de quem
  * está usando o app ou o `followUserLocation` da gravação.
+ *
+ * **Quem dirige a câmera.** São dois jeitos e eles não convivem. Por padrão o
+ * componente reenquadra o conteúdo, o que serve para um mapa salvo. Durante a
+ * gravação quem manda é a tela, porque o trajeto cresce a cada leitura e o
+ * auto-enquadramento puxaria a câmera para o centro do percurso a cada ponto,
+ * tirando o mapa da mão de quem está caminhando — foi o que aconteceu na primeira
+ * versão do `followUserLocation`. Passando `cameraToFollow`, o reenquadramento
+ * automático é desligado e a câmera segue o centro que a tela manda.
  */
 function DrawnMap({
   markers = [],
   polylines = [],
   userLocation,
   followUserLocation = false,
+  cameraToFollow = null,
+  onCameraSettled,
+  initialFocus = null,
   accessibilityLabel = 'Mapa do evento',
   className,
   testID,
@@ -130,6 +179,9 @@ function DrawnMap({
     polylines,
   });
 
+  /** Último centro reportado pela câmera, para a tolerância do laço de animação. */
+  const lastSettledCamera = useRef<Coordinate | null>(null);
+
   const latitude = userLocation?.latitude;
   const longitude = userLocation?.longitude;
   const userPosition = useMemo<Coordinate | null>(
@@ -142,14 +194,17 @@ function DrawnMap({
   });
 
   const contentKey = describeContent(markers, polylines);
+  const isCameraDriven = followUserLocation && cameraToFollow !== null;
 
   // `initialRegion` só vale na montagem, então pode ser um objeto novo a cada
   // render: o `MapView` ignora mudanças nessa prop depois de montado.
-  const initialRegion = regionForGeometry(contentCoordinates(markers, polylines)) ?? undefined;
+  const initialRegion = initialFocus
+    ? regionForCoordinate(initialFocus)
+    : (regionForGeometry(contentCoordinates(markers, polylines)) ?? undefined);
 
   useEffect(() => {
     const map = mapRef.current;
-    if (!isReady || !map) return;
+    if (!isReady || !map || isCameraDriven) return;
 
     const coordinates = validCoordinates(
       contentCoordinates(content.current.markers, content.current.polylines),
@@ -160,13 +215,36 @@ function DrawnMap({
       edgePadding: EDGE_PADDING,
       animated: true,
     });
-  }, [contentKey, isReady]);
+  }, [contentKey, isReady, isCameraDriven]);
 
   useEffect(() => {
-    if (!followUserLocation || !userPosition || !isReady) return;
+    if (!isCameraDriven || !cameraToFollow || !isReady) return;
 
-    mapRef.current?.animateToRegion(regionForCoordinate(userPosition), CAMERA_DURATION);
-  }, [followUserLocation, userPosition, isReady]);
+    mapRef.current?.animateToRegion(regionForCoordinate(cameraToFollow), CAMERA_DURATION);
+  }, [isCameraDriven, cameraToFollow, isReady]);
+
+  const handleRegionChangeComplete = useCallback(
+    (region: Region) => {
+      if (!onCameraSettled) return;
+
+      const center: Coordinate = [region.latitude, region.longitude];
+      const previous = lastSettledCamera.current;
+
+      // Um metro de tolerância: a animação de 250 ms nunca assenta exatamente no
+      // mesmo centro, e realimentar o efeito a cada quadro seria um laço de
+      // animações que não termina.
+      if (
+        previous &&
+        degreeDistanceInMeters(toLatLng(previous), toLatLng(center)) < CAMERA_SETTLED_TOLERANCE_M
+      ) {
+        return;
+      }
+
+      lastSettledCamera.current = center;
+      onCameraSettled(center);
+    },
+    [onCameraSettled],
+  );
 
   return (
     <View className={containerVariants({ className: className ?? 'flex-1' })} testID={testID}>
@@ -175,6 +253,7 @@ function DrawnMap({
         style={styles.map}
         initialRegion={initialRegion}
         onMapReady={() => setIsReady(true)}
+        onRegionChangeComplete={handleRegionChangeComplete}
         // O mapa de um local interno é lido de cima: girar e inclinar não acrescenta
         // nada e a rotação da cena é justamente o tipo de movimento que mais causa
         // desconforto (RNF04). O zoom e o arraste continuam liberados.

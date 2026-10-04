@@ -1,6 +1,6 @@
 import * as Location from 'expo-location';
 
-import type { Coordinates } from '@/types/coordinates';
+import type { Coordinates, LocationSample } from '@/types/coordinates';
 
 export type LocationProviderState = {
   servicesEnabled: boolean;
@@ -8,12 +8,28 @@ export type LocationProviderState = {
   isPrecise: boolean;
 };
 
+/**
+ * Intervalos pedidos ao GPS durante a gravação.
+ *
+ * `distanceInterval` é o que importa: o ponto só chega quando a pessoa andou um
+ * metro, e é o sensor que decide descartar a leitura por ruído. `timeInterval`
+ * limita a 1 s para o cronômetro e o status do sinal não ficarem atrasados, e não
+ * para gerar ponto — o filtro de espaçamento de `utils/recording.ts` faz esse
+ * trabalho.
+ */
+const WATCH_INTERVALS = {
+  accuracy: Location.Accuracy.High,
+  distanceInterval: 1,
+  timeInterval: 1000,
+} as const;
+
 /** Converte um `LocationObject` do expo-location no formato interno do projeto. */
-function toCoordinates(location: Location.LocationObject): Coordinates {
+function toSample(location: Location.LocationObject): LocationSample {
   return {
     latitude: location.coords.latitude,
     longitude: location.coords.longitude,
     accuracy: location.coords.accuracy ?? null,
+    recordedAt: location.timestamp,
   };
 }
 
@@ -44,24 +60,32 @@ export async function requestLocationPermission(): Promise<LocationProviderState
 
 /** Obtém a posição atual do dispositivo. */
 export async function getCurrentCoordinates(): Promise<Coordinates> {
-  const location = await Location.getCurrentPositionAsync({
-    accuracy: Location.Accuracy.High,
-  });
-  return toCoordinates(location);
+  const { latitude, longitude, accuracy } = toSample(await getCurrentLocation());
+  return { latitude, longitude, accuracy };
 }
 
-/** Assina atualizações de posição. Retorna a função para cancelar a assinatura. */
+/** Obtém a posição atual com o instante da leitura, para semear o trajeto. */
+export async function getCurrentSample(): Promise<LocationSample> {
+  return toSample(await getCurrentLocation());
+}
+
+function getCurrentLocation(): Promise<Location.LocationObject> {
+  return Location.getCurrentPositionAsync({ accuracy: WATCH_INTERVALS.accuracy });
+}
+
+/**
+ * Assina atualizações de posição. Retorna a função para cancelar a assinatura.
+ *
+ * O callback de erro vem logo depois do de posição porque é a assinatura que
+ * chama: `watchPositionAsync(qualidades, callback, onError)`.
+ */
 export async function watchPosition(
-  onPosition: (coordinates: Coordinates) => void,
+  onPosition: (sample: LocationSample) => void,
   onError?: (reason: string) => void,
 ): Promise<() => void> {
   const subscription = await Location.watchPositionAsync(
-    {
-      accuracy: Location.Accuracy.High,
-      distanceInterval: 1,
-      timeInterval: 1000,
-    },
-    (location) => onPosition(toCoordinates(location)),
+    WATCH_INTERVALS,
+    (location) => onPosition(toSample(location)),
     onError,
   );
 

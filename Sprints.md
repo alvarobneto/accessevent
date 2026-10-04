@@ -159,20 +159,81 @@ montagem.
 
 ### Sprint 4 — Gravação GPS
 
-* [ ] Solicitar permissão de localização (`expo-location`).
-* [ ] Obter posição atual.
-* [ ] Iniciar tracking via `expo-location`.
-* [ ] Registrar coordenadas.
-* [ ] Exibir trajetória em tempo real.
-* [ ] Pausar gravação.
-* [ ] Retomar gravação.
-* [ ] Finalizar gravação.
-* [ ] Calcular distância aproximada.
+* [x] Solicitar permissão de localização (`expo-location`).
+* [x] Obter posição atual.
+* [x] Iniciar tracking via `expo-location`.
+* [x] Registrar coordenadas.
+* [x] Exibir trajetória em tempo real.
+* [x] Finalizar gravação.
+* [x] Calcular distância aproximada.
 
-> **Ponto futuro relacionado:** a precisão da posição gravada está registrada em
-> **§11 — Pontos futuros**. O item de filtrar correções ruins por `accuracy` tem que entrar **antes**
-> da Sprint 5, porque depois que o ponto estiver gravado no `Path.geometry` ele já entra no cálculo de
-> rota como dado (Sprint 17).
+> **Itens do plano que saíram do escopo:** "Pausar gravação" e "Retomar gravação". Ver a decisão
+> abaixo e o PRD §9.2.
+
+**Entregue além da lista, e verificado:**
+
+- [x] A gravação é uma rota própria, `/organizer/event/[eventId]/map/[mapId]/record`, e
+      `/organizer/event/[eventId]/map/[mapId]` virou o hub: mostra o mapa e tem o botão
+      "Mapear novo caminho". É o fluxo do PRD §9.2 e é o que a Sprint 5 precisa — a tela
+      do hub é onde a lista de caminhos salvos vai entrar.
+- [x] `usePathRecording` (`src/hooks/`) é a máquina de estado; a tela desenha e não
+      decide. Estados: `idle` → `starting` → `recording` → `finished`, com `start`,
+      `finish` e `discard`.
+- [x] O resultado da permissão **é lido**: GPS desligado e permissão negada viram erro
+      em pt-BR na tela, e a gravação não começa. O protótipo anterior ignorava o retorno e
+      "começava" uma gravação que não gravava nada.
+- [x] Status do GPS visível durante a gravação (PRD §9.2): tempo, distância, contagem de
+      pontos, qualidade do sinal pela `accuracy` da última leitura e quantas leituras foram
+      descartadas. A qualidade vira texto porque o mapa é um gráfico (RNF04).
+- [x] Filtro de leitura antes de entrar no trajeto, em `src/utils/recording.ts`:
+      precisão acima de 30 m, espaçamento menor que 1 m e salto acima de 3 m/s. Este era o
+      item de §11 — Pontos futuros, e ele tinha que entrar **antes** da Sprint 5, porque
+      depois que o ponto estiver no `Path.geometry` ele já entra no cálculo de rota como
+      dado (Sprint 17). Registrado no PRD §9.2.
+- [x] A distância mostrada é a **soma dos trechos aceitos**, ou seja, o comprimento do
+      trajeto desenhado — não o caminho percorrido. Somar o trecho de uma leitura
+      descartada contaria o mesmo metro várias vezes, porque todas as leituras ruins em
+      sequência são medidas contra o mesmo último ponto aceito.
+- [x] A câmera segue o organizador durante a gravação sem brigar com o reenquadramento
+      automático da Sprint 3. `EventMap` ganhou `cameraToFollow`/`onCameraSettled` para
+      isso: quem passa a câmera desliga o `fitToCoordinates`, senão o trajeto crescendo
+      puxaria a câmera para o centro do percurso a cada ponto. Antes do primeiro fix a
+      tela mostra "Aguardando o GPS" no lugar do mapa, porque `initialRegion` só vale na
+      montagem e o mapa abriria no zoom do planeta.
+- [x] Finalizar mostra o trajeto em modo leitura com o resumo e **diz que não salvou** — a
+      Sprint 5 troca o aviso pelo `POST /paths`. Um trajeto com um único ponto avisa que um
+      ponto não forma caminho.
+- [x] Nada na gravação toca a rede, que é o que faz o RNF05 valer sem fila: perda
+      temporária de conexão não interrompe o mapeamento.
+- [x] 28 testes unitários dos limiares, do filtro, da distância e dos formatadores, com
+      vitest no mobile (o mesmo runner do backend); lint, typecheck e formatação limpos.
+
+**O que ainda precisa de aparelho físico.** O que foi verificado nesta sprint: lint, typecheck,
+28 testes unitários e o bundle de iOS exportando sem erro (`expo export`, o que prova que todo
+import resolve no Metro). O que **não** foi verificado, e não pode ser em simulador: a qualidade
+real do trajeto, o acompanhamento de câmera enquanto a pessoa caminha, os diálogos de permissão do
+iOS e do Android, e o aviso de precisão reduzida. Simulador e emulador devolvem posição sintética
+e o `accuracy` de lá não significa nada — a verificação de ponta a ponta da gravação fica para a
+Sprint 21, que é a que exige aparelho de verdade.
+
+**Gravação sem pausa, por decisão de equipe:** a pausa e a retomada saíram do escopo.
+Quem percorre um pavilhão não precisa pausar o trajeto — pausa o lugar, não a
+caminhada — e a pausa criaria dois caminhos na mesma sessão, com a decisão de onde um
+termina e o outro começa. Interromper é **finalizar** (fecha o trajeto) ou **descartar**
+(joga fora e volta a zero). O PRD §9.2 foi atualizado: ele pedia "botão para pausar", e a
+fonte de verdade não pode divergir da implementação. O botão de pausa que existia na
+Sprint 3 do protótipo era pior que inútil: ele parava o cronômetro e deixava o GPS
+continuar acrescentando pontos por baixo, então o trajeto crescia durante a pausa.
+
+**Gravação só com o app na frente:** a assinatura é do `expo-location` em primeiro plano,
+então sair para a tela de bloqueio ou para outra tela interrompe a entrega de posição.
+Tratar isso (serviço de primeiro plano com notificação permanente no Android,
+`allowsBackgroundLocationUpdates` no iOS) está fora do MVP e está registrado como
+limitação no PRD §30. A tela de gravação avisa que o app precisa ficar aberto.
+
+**O que a Sprint 5 herda:** `Path.geometry` é a `MapGeometry` que a gravação já produz em
+memória, e a distância em metros que a tela mostra é a que o `Path` vai gravar. O que
+falta é o `POST /paths` e a lista de caminhos na tela-hub.
 
 ### Sprint 5 — Persistência dos caminhos
 
@@ -693,10 +754,11 @@ para a decisão não se perder, não para entrar no backlog do MVP.
 
 ## Precisão da localização (`expo-location`)
 
-Hoje `mobile/src/services/locationService.ts` pede `Location.Accuracy.High` nas duas leituras. O
+`mobile/src/services/locationService.ts` continua pedindo `Location.Accuracy.High` nas duas leituras. O
 enum tem dois níveis acima dele: `Highest` e `BestForNavigation` ("o maior possível, usando dados
 adicionais de sensores para apps de navegação"). Subir o nível é a alavanca mais barata e custa
-bateria, então fica para quando houver gravação de verdade.
+bateria, então fica para quando a gravação mostrar que `High` não basta — a gravação da Sprint 4 já
+existe, mas o filtro de leitura abaixo resolve o caso comum antes de qualquer configuração.
 
 O que **não** é alavanca é o `accuracy` pedido: o teto de precisão é definido pela **permissão
 concedida**, e é dela que vem quase todo o problema.
@@ -704,20 +766,23 @@ concedida**, e é dela que vem quase todo o problema.
 - **iOS 14+** — `PermissionDetailsLocationIOS.accuracy` é `'full' | 'reduced'`. Em `'reduced'` a
   posição é aproximada, e o iOS **não deixa o app perguntar de novo**: uma segunda
   `requestForegroundPermissionsAsync` falha em silêncio e devolve `denied`. A única saída é levar a
-  pessoa aos Ajustes com `Linking.openSettings('app-settings:')`. Hoje `getLocationPermissionStatus`
-  já expõe `isPrecise`, mas nada no app oferece esse atalho.
+  pessoa aos Ajustes com `Linking.openSettings('app-settings:')`. `getLocationPermissionStatus`
+  expõe `isPrecise` e a gravação já mostra um aviso quando a permissão veio reduzida, mas **nada no
+  app oferece o atalho para os Ajustes** — foi decisão de equipe não abrir essa tela na Sprint 4, e
+  continua sendo o item pendente quando alguém quiser recuperar a precisão.
 - **Android** — `PermissionDetailsLocationAndroid.accuracy` é `'fine' | 'coarse' | 'none'`, e
   `coarse` dá precisão de cidade. `Location.enableNetworkProviderAsync()` pede à pessoa que ligue o
   modo de alta precisão (Wi-Fi + rede + GPS); fica para a gravação em background, porque ele puxa
   foreground service e notificação permanente.
 
-**O item que realmente importa** é filtrar por `coords.accuracy` antes de acrescentar o ponto ao
-`Path.geometry`. Num pavilhão o GPS degrada, e cada correção ruim gravada entra no cálculo de rota
-como dado — o Sprint 17 trata as arestas como dado, não como peso, então a sujeira fica. Descartar a
-correção é mais barato que qualquer configuração de precisão.
+**O item que realmente importa — o filtro por `coords.accuracy` — foi fechado na Sprint 4.** Num
+pavilhão o GPS degrada, e cada correção ruim gravada entra no cálculo de rota como dado — o Sprint 17
+trata as arestas como dado, não como peso, então a sujeira fica. Descartar a correção é mais barato
+que qualquer configuração de precisão. Os três limiares (precisão, espaçamento e salto) estão em
+`mobile/src/utils/recording.ts`, com teste, e as regras no PRD §9.2.
 
 **Limites que não são de software:** posicionamento interno de precisão exigiria beacon, UWB ou
 fingerprinting de Wi-Fi, e o PRD §5 põe beacon e posicionamento interno de alta precisão fora do
 MVP. O teto real do app é a qualidade do GPS/Wi-Fi do aparelho no local. E precisão só se avalia em
 aparelho físico: simulador e emulador devolvem posição sintética, e o `accuracy` de lá não significa
-nada.
+nada — foi por isso que a gravação da Sprint 4 **não** foi verificada em simulador.

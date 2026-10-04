@@ -46,6 +46,7 @@ npm run ios            # iOS simulator
 npm run android        # Android emulator
 npm run lint           # eslint
 npm run typecheck      # tsc --noEmit
+npm run test           # vitest run (specs de src/utils/ e src/types/)
 npm run format         # prettier --write
 npm run doctor         # expo-doctor
 ```

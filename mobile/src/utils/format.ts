@@ -65,3 +65,30 @@ export function formatDateRange(
   if (end) return `Termina em ${end}`;
   return undefined;
 }
+
+/**
+ * Distância da gravação para o organizador ler em voz alta enquanto caminha.
+ *
+ * Metros até 1 km, porque acima disso o metro perde a ordem de grandeza do que a
+ * pessoa percorre num pavilhão. Depois disso o quilômetro com uma casa nos
+ * valores grandes, para a distância não ficar com três algarismos mudando a cada
+ * passo.
+ */
+export function formatDistance(meters: number): string {
+  if (meters < 1000) return `${Math.round(meters)} m`;
+
+  const kilometers = meters / 1000;
+  return `${kilometers.toFixed(kilometers >= 10 ? 1 : 2)} km`;
+}
+
+/** Duração da gravação como `mm:ss`, e `h:mm:ss` só quando passar de uma hora. */
+export function formatDuration(milliseconds: number): string {
+  const totalSeconds = Math.floor(Math.max(0, milliseconds) / 1000);
+  const hours = Math.floor(totalSeconds / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
+  const seconds = totalSeconds % 60;
+
+  if (hours > 0) return `${hours}:${pad(minutes)}:${pad(seconds)}`;
+
+  return `${pad(minutes)}:${pad(seconds)}`;
+}

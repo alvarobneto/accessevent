@@ -319,8 +319,37 @@ Durante a gravação devem ser exibidos:
 * tempo de gravação;
 * distância estimada;
 * status do GPS;
-* botão para pausar;
 * botão para finalizar.
+
+O status do GPS mostra a qualidade do sinal a partir da precisão declarada pela
+última leitura do sensor, e quantas leituras foram descartadas — o vídeo de um
+organizador caminhando sem sinal nenhum é um caminho sem geometria, e o
+organizador precisa saber disso na hora.
+
+### A gravação não tem pausa
+
+> **Decisão de equipe, fechada durante a Sprint 4:** a gravação não tem pausa nem
+> retomada. Quem percorre um pavilhão não precisa pausar o trajeto — pausa o
+> lugar, não a caminhada — e a pausa só criaria dois caminhos a mesma sessão, com
+> a decisão de onde um termina e o outro começa. Interromper é **finalizar** (o
+> que fecha o trajeto) ou **descartar** (o que joga fora e volta a zero).
+
+### Descartes de leitura
+
+> **Decisão de equipe, fechada durante a Sprint 4:** uma leitura do GPS só entra no
+> caminho quando passa em três filtros, e o ponto descartado nunca chega ao banco:
+
+| Filtro | Limiar | O que descarta |
+| --- | --- | --- |
+| Precisão | acima de 30 m | Sinal degradado, comum dentro de prédio. |
+| Espaçamento | menos de 1 m do ponto anterior | Oscilação do sensor com o organizador parado. |
+| Velocidade | acima de 3 m/s (≈11 km/h) entre pontos com 1 s ou mais de intervalo | Correção isolada longe da posição real, que viraria um pico de dezenas de metros. |
+
+O motivo de descartar na gravação, e não confiar na melhor configuração de
+precisão do aparelho, é que o ponto gravado vira dado: ele entra no
+`Path.geometry` e, na Sprint 17, vira aresta do grafo que a rota percorre. A
+qualidade da leitura é decidida pela permissão concedida ao app, não pelo app —
+ver §30.
 
 ---
 
@@ -1100,7 +1129,15 @@ O sistema recalcularia as rotas automaticamente.
 
 O MVP deverá assumir explicitamente algumas limitações:
 
-* A precisão do GPS indoor não é garantida.
+* A precisão do GPS indoor não é garantida. Dentro de um pavilhão o sinal degrada,
+  e o teto real do app é a qualidade do GPS e do Wi-Fi do aparelho no local:
+  posicionamento interno de precisão exigiria beacon, UWB ou fingerprinting, e
+  isso está fora do escopo (§5). A gravação descarta a leitura ruim em vez de
+  gravar (§9.2), e por isso o trajeto resultante é sempre menos detalhado que o
+  desenho real do corredor.
+* A gravação é feita com o aplicativo aberto na frente. A Sprint 4 não registra
+  posição em segundo plano: isso exigiria serviço de primeiro plano com
+  notificação permanente no Android e `allowsBackgroundLocationUpdates` no iOS.
 * As informações de acessibilidade dependem do cadastro realizado pelo organizador.
 * O sistema não verifica automaticamente a largura ou condição física dos caminhos.
 * O mapa pode não representar todos os detalhes arquitetônicos do ambiente.
