@@ -244,11 +244,118 @@ Map
 Path
 ```
 
-* [ ] Criar mapa.
-* [ ] Salvar caminhos.
-* [ ] Buscar caminhos.
-* [ ] Excluir caminhos.
-* [ ] Renderizar caminhos salvos.
+* [x] Criar mapa. — já existia da Sprint 2 (`Map` + `GET`/`POST /events/:eventId/maps`)
+* [x] Salvar caminhos.
+* [x] Buscar caminhos.
+* [x] Excluir caminhos.
+* [x] Renderizar caminhos salvos.
+
+**Entregue além da lista, e verificado:**
+
+- [x] `Path` como entidade de verdade: `src/paths/path.entity.ts`, migração
+      `1730000001000-CreatePaths` com `geometry` em `jsonb`, `distance` em `real`,
+      `mapId` com `ON DELETE CASCADE` e índice. Apagar a navegação leva os caminhos
+      junto, e o repositório em memória espelha isso.
+- [x] `POST /maps/:mapId/paths`, `GET /maps/:mapId/paths`, `GET /paths/:pathId` e
+      `DELETE /paths/:pathId` (`204` sem corpo), com o mesmo desenho dos endpoints de
+      navegação: `mapId` vem da rota e nunca do corpo, e id malformado responde `400`
+      pelo `ParseUuidPipe` em vez de estourar `500` no Postgres.
+- [x] **A distância é calculada pelo servidor, e não aceita do app.** `pathLengthInMeters`
+      soma os trechos da geometria com haversine e arredonda na décima, e o corpo do
+      `POST` é só `{ geometry }`. Motivo: com a coluna e o número da tela como
+      entradas independentes, o cálculo de rota da Sprint 16 ordenaria distâncias e a
+      tela de gravação mostraria outra, e nenhum dos dois lados teria como acusar o
+      erro. Registrar o derivado perto de quem o derivou também tira a soma do
+      filter do app do caminho crítico.
+- [x] `geometryLengthInMeters` no mobile existe **para o repositório em memória
+      concordar com a API** — as duas implementações devolvem o mesmo número, e há
+      teste dos dois lados. A tela de gravação não usa a função: ela soma trecho a
+      trecho a cada leitura aceita, porque recalcular a geometria inteira a cada
+      ponto seria quadrático no tamanho do trajeto. As duas contas dão o mesmo
+      valor, e essa é a razão de o filtro da Sprint 4 somar só o que entra no
+      desenho.
+- [x] **Coluna por etapa, e não o `Path` inteiro de uma vez.** `startNodeId` e
+      `endNodeId` dependem dos pontos de interesse, que só existem na Sprint 7 — uma
+      chave estrangeira para um nó que o app não cria seria um `404` no meio da
+      gravação. `accessibilityStatus`, `width`, `hasStairs`, `hasRamp`, `floorType` e
+      `notes` são da Sprint 9. Criar tudo agora faria o schema afirmar que o app
+      sabe preencher o que não tem tela para preencher. Registrado no PRD §23.
+- [x] Geometria inválida responde com **uma** mensagem. `@IsArray` com `@ArrayMinSize`
+      empilhado é o jeito obvio e produz quatro frases para o mesmo corpo
+      (`"geometry": "entrada-elevador"` devolvia "não é uma lista", "tem pontos
+      demais", "precisa de pelo menos 2 pontos" e "cada ponto deve ser um par"), e o
+      app mostra a lista inteira. `IsPathGeometry` devolve o primeiro problema e a
+      frase dele. `@IsCoordinateTuple` existe porque o `class-validator` não tem
+      validador para tupla numérica — `@ValidateNested` espera uma classe, e a
+      geometria é uma lista de pares.
+- [x] Trajeto degenerado é recusado com `400`: uma geometria de pontos todos iguais
+      passa na validação de formato — é uma lista de coordenadas válidas — e viraria
+      uma aresta de comprimento zero na Sprint 16, quando já não daria para saber de
+      onde veio.
+- [x] No app, finalizar virou "Salvar no mapa": o `POST` acontece só quando o
+      organizador confirma, o erro da API aparece na tela em vez de sumir com a
+      gravação, e o trajeto continua em memória para tentar de novo sem percorrer o
+      local outra vez. A tela de resumo deixou de dizer que não salvava.
+- [x] O hub virou a lista que a Sprint 4 empurrou para baixo: os caminhos salvos
+      aparecem desenhados no `EventMap` e em linhas com distância, contagem de pontos
+      e data e hora da gravação. Navegação e caminhos são carregados **separados** —
+      a lista falhar não pode apagar o mapa da tela — e o `useRefreshOnFocus`
+      recarrega os dois, então o caminho salvo em `/record` aparece ao voltar sem
+      passar pela tela de escolha de modo.
+- [x] Apagar caminho é por linha, com `Dialog` destrutivo repetindo distância e
+      data, botão ocupado enquanto o pedido está em voo e erro da API dentro do
+      diálogo. É a mesma regra do `DeleteAction`, que é de tela de detalhes: ação
+      irreversível no corpo da tela, longe do menu do cabeçalho.
+- [x] Caminho **não tem nome** nesta sprint, e a lista não finge que tem: o que
+      identifica a linha é onde a pessoa andou, quanto deu e quando. Nomear é da
+      Sprint 6, junto com editar e selecionar o caminho.
+- [x] `polylinesFromPaths` em `src/utils/mapContent.ts`, com teste: caminho de um
+      ponto só ou com coordenada fora do globo não vira polilinha, e o `tone` fica no
+      padrão — pintar o caminho de uma cor que sugere acessibilidade seria vender o
+      que o PRD §19 diz que ninguém verificou.
+- [x] `formatDateTime` para a lista, com hora junto: duas caminhadas no mesmo dia são
+      a regra em um pavilhão, e `02/09/2026` não diz qual trajeto é qual.
+- [x] 38 testes unitários e 52 e2e no backend, 37 no mobile, lint, typecheck e
+      formatação limpos nos dois apps, e o bundle de iOS exportando sem erro.
+
+**Verificado contra o PostgreSQL de verdade** (`docker compose up -d --build`), não
+só por e2e com dublês:
+
+- [x] Migração aplicada (`Aplicada: CreatePaths1730000001000`) e `\d paths` confere
+      com a entidade: `geometry jsonb`, `distance real`, `mapId` com
+      `paths_map_id_fk ... ON DELETE CASCADE` (`confdeltype = c`) e `paths_map_id_idx`.
+- [x] **A distância do servidor bate com a do app.** A geometria de 4 pontos em São
+      Paulo devolveu `36.4 m`, e a soma em Python com a fórmula do `geo.ts` do mobile
+      dá `36.3975` → `36.4`. A ida e volta de meio grau em Recife devolveu
+      `111194.9` dos dois lados. É a paridade que o repositório em memória promete,
+      conferida com a API no ar em vez de só por leitura de código.
+- [x] `POST` → `201` com o caminho salvo; `GET /maps/:mapId/paths` em ordem de
+      criação; `GET /paths/:pathId` → `200`; `DELETE` → `204` e o `GET` seguinte
+      `404`.
+- [x] `jsonb` guarda a geometria como array (`jsonb_typeof = array`,
+      `jsonb_array_length = 4`), sem serializar como string.
+- [x] Erros no banco real: `distance` no corpo → `400`; geometria string, um ponto
+      só, latitude fora do globo e comprimento zero → `400` com **uma** mensagem
+      cada; `mapId` malformado → `400`; mapa e caminho inexistentes → `404`.
+- [x] **Cascade conferido contando linhas:** o mapa tinha 1 caminho, `DELETE` do mapa
+      devolveu `204` e o caminho foi junto (`1` → `0`). Na cadeia inteira, evento com
+      mapa e caminho apagou os dois (`maps=1 paths=1` → `maps=0 paths=0`).
+- [x] `revert` da `CreatePaths` derruba a tabela e `run` recria — migração que não
+      volta é armadilha para quem precisar desfazer em ambiente de teste.
+
+**O que continua pendente.** Só o que não tem como ser verificado sem aparelho:
+percurso real de GPS, câmera e permissão de localização, como a Sprint 4 anotou.
+
+**Aberto e decidido no meio da sprint: a mensagem de campo fora do contrato.** O
+`forbidNonWhitelisted` do `ValidationPipe` global respondia
+`property distance should not exist`, em inglês — o único texto de erro que o app
+mostrava sem ser pt-BR, porque não vem de um DTO e sim do `class-validator`. O
+`exceptionFactory` em `src/app.setup.ts` troca por
+`O campo "distance" não faz parte deste recurso.`, e a troca é global de propósito:
+a regra é global, e traduzir por endpoint deixaria a mesma classe de erro com dois
+comportamentos na API. Alterar o `ValidationPipe` é mexer no contrato de erro de
+todos os endpoints com DTO, então foi uma decisão à parte, com o commit da
+Sprint 5 — e não uma feature escondida no meio da persistência.
 
 ### Resultado da fase
 

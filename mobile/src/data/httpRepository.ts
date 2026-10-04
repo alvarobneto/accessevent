@@ -1,7 +1,13 @@
 import { api, ApiError } from '@/services/apiClient';
 
-import type { AppRepository, EventChanges, NewEvent, NewNavigationMap } from './repository';
-import type { Event, NavigationMap } from './types';
+import type {
+  AppRepository,
+  EventChanges,
+  NewEvent,
+  NewNavigationMap,
+  NewPath,
+} from './repository';
+import type { Event, NavigationMap, Path } from './types';
 
 /**
  * `AppRepository` sobre a API do backend (Sprint 2).
@@ -73,6 +79,29 @@ export function createHttpRepository(): AppRepository {
 
     async deleteNavigationMap(mapId) {
       await api.delete<void>(`/maps/${mapId}`);
+    },
+
+    async listPaths(mapId) {
+      return api.get<Path[]>(`/maps/${mapId}/paths`);
+    },
+
+    async createPath({ mapId, geometry }: NewPath) {
+      // Só a geometria vai no corpo: a API calcula a distância, e mandar o valor
+      // calculado aqui faria o servidor responder 400 pelo campo fora do contrato.
+      return api.post<Path>(`/maps/${mapId}/paths`, { geometry });
+    },
+
+    async getPath(pathId) {
+      try {
+        return await api.get<Path>(`/paths/${pathId}`);
+      } catch (error) {
+        if (isNotFound(error)) return null;
+        throw error;
+      }
+    },
+
+    async deletePath(pathId) {
+      await api.delete<void>(`/paths/${pathId}`);
     },
   };
 }

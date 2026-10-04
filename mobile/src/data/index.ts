@@ -16,5 +16,11 @@ export const repository: AppRepository = useInMemoryData
   ? createInMemoryRepository()
   : createHttpRepository();
 
-export type { AppRepository, EventChanges, NewEvent, NewNavigationMap } from './repository';
-export type { Event, NavigationMap } from './types';
+export type {
+  AppRepository,
+  EventChanges,
+  NewEvent,
+  NewNavigationMap,
+  NewPath,
+} from './repository';
+export type { Event, NavigationMap, Path } from './types';

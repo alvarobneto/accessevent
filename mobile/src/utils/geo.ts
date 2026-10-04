@@ -84,6 +84,34 @@ export function distanceInMeters(from: Coordinate, to: Coordinate): number {
 }
 
 /**
+ * Comprimento do trajeto em metros: a soma dos trechos, com o mesmo arredondamento
+ * do `pathLengthInMeters` do backend.
+ *
+ * Existe para o repositório em memória (`EXPO_PUBLIC_DATA_SOURCE=memory`) gravar a
+ * mesma distância que a API gravaria. As duas implementações precisam concordar,
+ * senão o mesmo trajeto aparece com dois números conforme a fonte de dados — e o
+ * cálculo de rota da Sprint 16 vai comparar distâncias.
+ *
+ * A tela de gravação **não** usa esta função: ela soma trecho a trecho a cada
+ * leitura aceita, porque recalcular a geometria inteira a cada ponto seria
+ * quadrático no tamanho do trajeto. As duas contas dão o mesmo número.
+ */
+export function geometryLengthInMeters(geometry: MapGeometry): number {
+  let total = 0;
+
+  for (let index = 1; index < geometry.length; index += 1) {
+    const previous = geometry[index - 1];
+    const current = geometry[index];
+
+    if (previous && current) {
+      total += distanceInMeters(previous, current);
+    }
+  }
+
+  return Math.round(total * 10) / 10;
+}
+
+/**
  * Distância em metros a partir de um deslocamento em graus.
  *
  * O `react-native-maps` entrega o ponto de câmera já em graus, e a distância entre

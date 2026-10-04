@@ -326,6 +326,12 @@ O status do GPS mostra a qualidade do sinal a partir da precisão declarada pela
 organizador caminhando sem sinal nenhum é um caminho sem geometria, e o
 organizador precisa saber disso na hora.
 
+Ao finalizar, o aplicativo mostra o resumo do trajeto e só grava quando o
+organizador confirma em "Salvar no mapa": antes disso o caminho existe só na tela.
+A distância gravada é calculada pelo servidor a partir da geometria recebida, e não
+aceita do aplicativo — um mesmo trajeto não pode ter duas distâncias, e o cálculo
+de rota vai comparar essa coluna.
+
 ### A gravação não tem pausa
 
 > **Decisão de equipe, fechada durante a Sprint 4:** a gravação não tem pausa nem
@@ -844,6 +850,12 @@ hasRamp
 floorType
 notes
 ```
+
+As colunas chegam por etapa, na ordem em que o app passa a usá-las: `geometry` e
+`distance` com a gravação do caminho (RF05), `startNodeId` e `endNodeId` quando
+existirem os pontos que são as pontas do caminho, e os atributos de acessibilidade
+na fase de acessibilidade. Criá-las todas de uma vez faria o schema afirmar que o
+app sabe preencher o que ele ainda não tem como preencher.
 
 ## PointOfInterest
 

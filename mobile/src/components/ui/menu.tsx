@@ -1,4 +1,4 @@
-import { useRef, type ReactNode } from 'react';
+import { useMemo, useRef, type ReactNode } from 'react';
 import { Platform } from 'react-native';
 import { MenuView, type MenuAction, type MenuComponentRef } from '@expo/ui/community/menu';
 
@@ -50,25 +50,53 @@ type MenuProps = {
  * própria e ignora o responder do JS, então o menu já funciona sem handler. E
  * `show()` é no-op lá — com um `console.warn` em desenvolvimento —, daí o
  * `Platform.OS` em vez de chamar `show()` nas duas plataformas.
+ *
+ * **A ação do menu espera um frame para navegar.** O `onPressAction` chega com o
+ * menu nativo ainda se fechando, e quase toda ação nossa muda de tela. No iOS o
+ * menu é um `UIHostingController` do SwiftUI: navegar no mesmo tick desmonta o
+ * controller de onde ele vai se apresentar, e o iOS avisa no console que isso pode
+ * dar inset de safe area errado — e que vira exceção em uma versão futura. Um
+ * `requestAnimationFrame` deixa o menu terminar de sair antes de a tela mudar, e no
+ * Android não muda nada, porque o `DropdownMenu` do Material já fechou quando a
+ * ação chega.
+ *
+ * **O array de ações é memoizado pelo conteúdo, não pela identidade.** As telas
+ * montam `items` dentro do render, então um array novo a cada render fazia o menu
+ * nativo tentar se atualizar sem necessidade — e é esse `updateVisibleMenu` sem
+ * menu visível que o iOS reclama. Só o que o nativo lê entra na chave; o
+ * `onSelect` continua sendo procurado no `items` do render atual, que é sempre o
+ * callback novo.
  */
 export function Menu({ accessibilityLabel, items, trigger, testID }: MenuProps) {
   const menuRef = useRef<MenuComponentRef>(null);
 
-  const actions: MenuAction[] = items.map((item) => ({
-    id: item.id,
-    title: item.label,
-    attributes: item.destructive ? { destructive: true } : undefined,
-  }));
+  const actionsSignature = JSON.stringify(
+    items.map(({ id, label, destructive }) => ({ id, label, destructive })),
+  );
+
+  const actions = useMemo<MenuAction[]>(
+    () =>
+      items.map((item) => ({
+        id: item.id,
+        title: item.label,
+        attributes: item.destructive ? { destructive: true } : undefined,
+      })),
+    // A dependência é a chave de conteúdo: `items` muda de identidade a cada
+    // render das telas, e o que o nativo lê são só `id`, `label` e `destructive`.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [actionsSignature],
+  );
+
+  const handleSelect = (event: { nativeEvent: { event: string } }) => {
+    const selected = items.find((item) => item.id === event.nativeEvent.event);
+
+    if (!selected) return;
+
+    requestAnimationFrame(() => selected.onSelect());
+  };
 
   return (
-    <MenuView
-      ref={menuRef}
-      actions={actions}
-      onPressAction={(event) =>
-        items.find((item) => item.id === event.nativeEvent.event)?.onSelect()
-      }
-      testID={testID}
-    >
+    <MenuView ref={menuRef} actions={actions} onPressAction={handleSelect} testID={testID}>
       {trigger ?? (
         <IconButton
           icon="dots-vertical"

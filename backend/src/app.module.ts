@@ -11,6 +11,7 @@ import { buildTypeOrmOptions } from './database/typeorm.options.js';
 import { EventsModule } from './events/events.module.js';
 import { HealthModule } from './health/health.module.js';
 import { MapsModule } from './maps/maps.module.js';
+import { PathsModule } from './paths/paths.module.js';
 
 @Module({
   imports: [
@@ -29,6 +30,7 @@ import { MapsModule } from './maps/maps.module.js';
     HealthModule,
     EventsModule,
     MapsModule,
+    PathsModule,
   ],
 })
 export class AppModule {}

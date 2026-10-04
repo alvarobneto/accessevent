@@ -1,4 +1,4 @@
-import { formatDistance, formatDuration } from '@/utils/format';
+import { formatDateTime, formatDistance, formatDuration } from '@/utils/format';
 
 describe('formatDistance', () => {
   it('mostra metros até um quilômetro', () => {
@@ -34,5 +34,28 @@ describe('formatDuration', () => {
 
   it('não devolve duração negativa', () => {
     expect(formatDuration(-5_000)).toBe('00:00');
+  });
+});
+
+describe('formatDateTime', () => {
+  it('junta data e hora, que é o que a lista de caminhos mostra', () => {
+    // Montado com componentes locais de propósito: um instante em UTC cairia em
+    // outro dia dependendo da máquina, e o passaria a medir o fuso de quem roda.
+    const recorded = new Date(2026, 8, 2, 15, 30);
+
+    // O separador entre os grupos varia com o ICU ("02/09/2026, 15:30" ou
+    // "02/09/2026 15:30"), então o teste casa os dois sem cravar o texto.
+    expect(formatDateTime(recorded.toISOString())).toMatch(/02\/09\/2026\D+15:30/);
+  });
+
+  it('distingue duas gravações do mesmo dia', () => {
+    const morning = new Date(2026, 8, 2, 9, 5);
+    const afternoon = new Date(2026, 8, 2, 15, 30);
+
+    expect(formatDateTime(morning.toISOString())).not.toBe(formatDateTime(afternoon.toISOString()));
+  });
+
+  it('mostra travessão para data inválida', () => {
+    expect(formatDateTime('nao-e-data')).toBe('—');
   });
 });

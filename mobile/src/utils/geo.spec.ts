@@ -1,5 +1,11 @@
 import type { Coordinate } from '@/types/coordinates';
-import { degreeDistanceInMeters, distanceInMeters, isValidCoordinate } from '@/utils/geo';
+import type { MapGeometry } from '@/types/map';
+import {
+  degreeDistanceInMeters,
+  distanceInMeters,
+  geometryLengthInMeters,
+  isValidCoordinate,
+} from '@/utils/geo';
 
 /** Recife, onde fica o Centro de Convivência Cultural da UFPE. */
 const RECIFE: Coordinate = [-8.047_6, -34.877];
@@ -70,5 +76,29 @@ describe('isValidCoordinate', () => {
   it('recusa coordenada ausente', () => {
     expect(isValidCoordinate(null)).toBe(false);
     expect(isValidCoordinate(undefined)).toBe(false);
+  });
+});
+
+describe('geometryLengthInMeters', () => {
+  it('é zero para uma geometria vazia ou de um ponto', () => {
+    expect(geometryLengthInMeters([])).toBe(0);
+    expect(geometryLengthInMeters([RECIFE])).toBe(0);
+  });
+
+  it('soma os trechos em vez de medir a ponta à ponta', () => {
+    // Ida e volta de meio grau: o percurso é o dobro do deslocamento, e é o
+    // percurso que a pessoa sente ao andar o corredor de um pavilhão.
+    const trail: MapGeometry = [RECIFE, [-7.547_6, -34.877], RECIFE];
+    const oneWay = distanceInMeters(RECIFE, [-7.547_6, -34.877]);
+
+    expect(geometryLengthInMeters(trail)).toBeCloseTo(oneWay * 2, 1);
+  });
+
+  it('arredonda para a décima de metro, igual ao backend', () => {
+    const trail: MapGeometry = [RECIFE, [-8.047_7, -34.877]];
+
+    expect(geometryLengthInMeters(trail)).toBe(
+      Math.round(distanceInMeters(RECIFE, [-8.047_7, -34.877]) * 10) / 10,
+    );
   });
 });

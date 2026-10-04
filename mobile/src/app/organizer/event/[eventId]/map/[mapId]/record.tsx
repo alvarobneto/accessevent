@@ -1,14 +1,16 @@
-import { Stack, router } from 'expo-router';
-import { useMemo, useState } from 'react';
+import { Stack, router, useLocalSearchParams } from 'expo-router';
+import { useCallback, useMemo, useState } from 'react';
 import { View } from 'react-native';
 
 import { EventMap } from '@/components/map';
 import { Screen } from '@/components/screen';
 import { Alert, Button, Card, EmptyState, Icon, Text } from '@/components/ui';
+import { repository } from '@/data';
 import { usePathRecording } from '@/hooks/usePathRecording';
 import { colors } from '@/theme/tokens';
 import type { Coordinate } from '@/types/coordinates';
 import type { MapPolyline } from '@/types/map';
+import { toErrorMessage } from '@/utils/errors';
 import { formatDistance, formatDuration } from '@/utils/format';
 import { GPS_SIGNAL_LABELS } from '@/utils/recording';
 
@@ -20,20 +22,24 @@ const MINIMUM_POINTS = 2;
  *
  * A tela é sua própria rota porque a gravação é uma tarefa, não um detalhe da tela
  * da navegação: tem entrada (iniciar), acompanhamento (tempo, distância e status
- * do GPS) e saída (finalizar ou descartar). Abrir o mapa continua sendo o gesto de
- * ver o que já existe — o PRD §9.2 é quem descreve esta tela, do "Iniciar gravação"
- * ao "Caminho é adicionado ao mapa".
+ * do GPS) e saída (finalizar e salvar, ou descartar). Abrir o mapa continua sendo
+ * o gesto de ver o que já existe — o PRD §9.2 é quem descreve esta tela, do
+ * "Iniciar gravação" ao "Caminho é adicionado ao mapa".
  *
  * A máquina de estado da gravação é `usePathRecording`; aqui só se desenha. O
- * trajeto fica em memória até a Sprint 5 gravar o `Path`, e a tela diz isso em vez
- * de fingir que salvou.
+ * trajeto fica em memória até `finalizar`, e só vira `Path` quando a pessoa
+ * confirma: o botão de salvar é o que grava, e o erro da API aparece na tela em
+ * vez de sumir com a gravação.
  */
 export default function RecordPathScreen() {
+  const { mapId } = useLocalSearchParams<{ eventId: string; mapId: string }>();
   const recording = usePathRecording();
   const { status, geometry, distanceMeters, elapsedMs, discardedCount, signal, accuracy } =
     recording;
 
   const [cameraCenter, setCameraCenter] = useState<Coordinate | null>(null);
+  const [isSaving, setIsSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
 
   const polylines = useMemo<MapPolyline[]>(
     () => (geometry.length > 0 ? [{ id: 'recorded-path', geometry, tone: 'default' }] : []),
@@ -55,6 +61,28 @@ export default function RecordPathScreen() {
 
   const isRecording = status === 'recording';
   const isFinished = status === 'finished';
+  const hasTrail = geometry.length >= MINIMUM_POINTS;
+
+  /**
+   * Grava o trajeto e volta para o mapa, onde ele aparece desenhado.
+   *
+   * A distância não vai no corpo: a API calcula a partir da mesma geometria e
+   * devolve o valor, então quem mostra o número na tela e quem grava não podem
+   * discordar. O erro do `ApiError` aparece aqui — o trajeto continua em memória e
+   * a pessoa pode tentar de novo sem percorrer o local outra vez.
+   */
+  const savePath = useCallback(async () => {
+    setIsSaving(true);
+    setSaveError(null);
+
+    try {
+      await repository.createPath({ mapId, geometry });
+      router.back();
+    } catch (error) {
+      setSaveError(toErrorMessage(error, 'Não foi possível salvar o caminho. Tente novamente.'));
+      setIsSaving(false);
+    }
+  }, [geometry, mapId]);
 
   return (
     <>
@@ -77,7 +105,7 @@ export default function RecordPathScreen() {
         )}
 
         <View className="gap-4">
-          {isRecording || isFinished ? (
+          {isRecording ? (
             <RecordingPanel
               elapsedMs={elapsedMs}
               distanceMeters={distanceMeters}
@@ -144,18 +172,38 @@ export default function RecordPathScreen() {
 
           {isFinished ? (
             <>
-              {geometry.length < MINIMUM_POINTS ? (
+              {hasTrail ? (
+                <Card variant="soft">
+                  <View className="gap-3">
+                    <View className="flex-row justify-between">
+                      <Stat label="Tempo" value={formatDuration(elapsedMs)} />
+                      <Stat label="Distância" value={formatDistance(distanceMeters)} />
+                      <Stat label="Pontos" value={String(geometry.length)} />
+                    </View>
+                    <Text variant="caption" tint="muted">
+                      Distância estimada pelo percurso, não em linha reta entre as pontas.
+                    </Text>
+                  </View>
+                </Card>
+              ) : (
                 <Alert
                   tone="warning"
                   title="Trajeto muito curto"
                   description="A gravação tem um único ponto, e um ponto não forma caminho. Percorra o local de novo para registrar o trecho."
                 />
+              )}
+
+              {saveError ? (
+                <Alert tone="error" title="Não foi possível salvar" description={saveError} />
               ) : null}
 
-              <Alert
-                tone="info"
-                title="Trajeto registrado nesta gravação"
-                description="O caminho ainda não é enviado ao servidor: guardar o trajeto no mapa é a próxima etapa. Você pode descartá-lo e gravar de novo."
+              <Button
+                label="Salvar no mapa"
+                iconStart={<Icon name="content-save-outline" size={20} color={colors.white} />}
+                onPress={() => void savePath()}
+                loading={isSaving}
+                disabled={!hasTrail || isSaving}
+                fullWidth
               />
 
               <Button
@@ -163,13 +211,15 @@ export default function RecordPathScreen() {
                 variant="danger"
                 iconStart={<Icon name="trash-can-outline" size={20} color={colors.white} />}
                 onPress={recording.discard}
+                disabled={isSaving}
                 fullWidth
               />
 
               <Button
-                label="Voltar à navegação"
+                label="Voltar sem salvar"
                 variant="ghost"
                 onPress={() => router.back()}
+                disabled={isSaving}
                 fullWidth
               />
             </>

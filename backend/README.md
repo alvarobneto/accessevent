@@ -55,10 +55,20 @@ npm run migration:revert  # reverte a última migração aplicada
 
 ## Banco de dados
 
+O banco é gerenciado pelo **`docker-compose.yml` da raiz do repositório**, que
+também roda a API e as migrações. Não existe um compose só com o Postgres dentro
+de `backend/`: os dois arquivos declaravam um container de mesmo nome
+(`accessevent-postgres`), e o da raiz não subia por causa do conflito de nome. O
+volume do Postgres é gerenciado por esse compose da raiz.
+
 ```bash
-# sobe apenas o PostgreSQL a partir da raiz do repositório
-docker compose up -d postgres
+# a partir da raiz do repositório
+docker compose up -d postgres   # só o banco
+docker compose up -d --build    # banco + migrações + API
 ```
+
+O `docker compose` encontra o arquivo da raiz mesmo quando o comando roda de
+dentro de `backend/`, porque o Compose sobe os diretórios até achar o compose.
 
 ### Migrações
 
@@ -173,7 +183,14 @@ Apagar o evento apaga as navegações dele (`ON DELETE CASCADE`).
 - Identificadores, colunas e respostas da API em **inglês**; mensagens voltadas ao
   usuário em **pt-BR**. As regras de validação escrevem a própria mensagem em
   pt-BR (`@MaxLength(120, { message: '...' })`), então o app mostra o erro do
-  servidor sem traducción.
+  servidor sem tradução.
+- **A única mensagem que o DTO não escreve é a de campo fora do contrato**, porque ela
+  não vem do DTO: o `forbidNonWhitelisted` do `ValidationPipe` gera
+  `property distance should not exist`, em inglês. O `exceptionFactory` em
+  `src/app.setup.ts` troca por `O campo "distance" não faz parte deste recurso.` — o
+  app mostra a frase do corpo (`ApiError` no mobile), e o erro é de cliente, mas quem
+  lê é o organizador. A tradução fica no pipe global porque a regra é global: tratar
+  por endpoint deixaria a mesma classe de erro com dois comportamentos.
 - `synchronize` do TypeORM está desligado de propósito — migrações viram explícitas.
 - `configureApp` em `src/app.setup.ts` concentra CORS e `ValidationPipe`. O
   `main.ts` e os testes e2e usam a mesma função, então os `400` cobertos nos testes

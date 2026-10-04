@@ -1,16 +1,29 @@
 import { Stack, router, useLocalSearchParams } from 'expo-router';
+import { useMemo } from 'react';
 import { View } from 'react-native';
 
 import { AsyncContent } from '@/components/async-content';
 import { EventMap } from '@/components/map';
 import { NavigationMenu } from '@/components/navigation-menu';
+import { NoPathsHint, PathList } from '@/components/path-list';
 import { Screen } from '@/components/screen';
 import { Section } from '@/components/section';
 import { Badge, Button, Card, EmptyState, Icon, Text } from '@/components/ui';
 import { repository } from '@/data';
+import type { Path } from '@/data/types';
 import { useAsyncData } from '@/hooks/useAsyncData';
 import { useRefreshOnFocus } from '@/hooks/useRefreshOnFocus';
 import { colors } from '@/theme/tokens';
+import { polylinesFromPaths } from '@/utils/mapContent';
+
+/**
+ * Lista vazia com identidade estável.
+ *
+ * O `EventMap` reenquadra a câmera quando o conteúdo muda, e um array novo a cada
+ * render com o mesmo conteúdo faria a tela recomputar as polilinhas sem parar. Com
+ * uma constante, o `useMemo` abaixo só depende do conteúdo de verdade.
+ */
+const NO_PATHS: readonly Path[] = [];
 
 /**
  * Gerenciar Navegação: o mapa e o que ainda vai existir nele.
@@ -21,24 +34,35 @@ import { colors } from '@/theme/tokens';
  * navegação (nome, datas) não aparecem aqui: eles têm tela própria, atrás de
  * "Ver detalhes".
  *
- * Esta tela é o **hub** do mapa: mostra o que já foi desenhado e é de onde sai a
- * gravação de caminho. A gravação mora em `/record` (PRD §9.2) porque é uma tarefa
- * com início, acompanhamento e fim — emaranhada aqui, ela empurraria para baixo a
- * lista de caminhos que a Sprint 5 traz. Por isso o mapa é o suficiente grande
- * para mostrar o trajeto ao lado do botão que o produz.
+ * Esta tela é o **hub** do mapa: mostra os caminhos já gravados sobre o mapa e é
+ * de onde sai a gravação. A gravação mora em `/record` (PRD §9.2) porque é uma
+ * tarefa com início, acompanhamento e fim — emaranhada aqui, ela empurraria para
+ * baixo a lista de caminhos, que é o que a tela tem que mostrar.
  *
- * O desenho é o `EventMap` da Sprint 3; os caminhos salvos e os pontos de interesse
- * entram nas Sprints 5 a 8.
+ * Navegação e caminhos são carregados separados: a lista falhar não pode apagar o
+ * mapa da tela, e o `useRefreshOnFocus` recarrega os dois quando a pessoa volta da
+ * gravação — o caminho salvo em `/record` precisa aparecer aqui sem exigir uma ida
+ * até a tela de escolha de modo.
+ *
+ * O desenho é o `EventMap` da Sprint 3; os pontos de interesse entram na Sprint 7.
  */
 export default function ManageNavigationMapScreen() {
   const { eventId, mapId } = useLocalSearchParams<{ eventId: string; mapId: string }>();
   const id = mapId ?? '';
 
   const map = useAsyncData(() => repository.getNavigationMap(id), id);
+  const savedPaths = useAsyncData(() => repository.listPaths(id), id);
 
-  useRefreshOnFocus(map.reload);
+  useRefreshOnFocus(() => {
+    map.reload();
+    savedPaths.reload();
+  });
 
   const navigationName = map.state.status === 'success' ? map.state.data?.name : null;
+
+  const paths = savedPaths.state.status === 'success' ? savedPaths.state.data : NO_PATHS;
+
+  const polylines = useMemo(() => polylinesFromPaths(paths), [paths]);
 
   return (
     <>
@@ -59,7 +83,14 @@ export default function ManageNavigationMapScreen() {
                 <View className="gap-3">
                   <EventMap
                     className="h-72 rounded-lg border border-border"
-                    accessibilityLabel="Mapa da navegação"
+                    polylines={polylines}
+                    accessibilityLabel={
+                      paths.length > 0
+                        ? `Mapa da navegação com ${paths.length} ${
+                            paths.length === 1 ? 'caminho registrado' : 'caminhos registrados'
+                          }`
+                        : 'Mapa da navegação'
+                    }
                   />
                   <Text variant="caption">
                     O mapa é desenhado a partir dos caminhos que você percorre no local.
@@ -78,6 +109,16 @@ export default function ManageNavigationMapScreen() {
                   fullWidth
                 />
 
+                <AsyncContent
+                  state={savedPaths.state}
+                  onRetry={savedPaths.reload}
+                  loadingLabel="Carregando os caminhos…"
+                  isEmpty={(list) => list.length === 0}
+                  empty={<NoPathsHint />}
+                >
+                  {(list) => <PathList paths={list} onChanged={savedPaths.reload} />}
+                </AsyncContent>
+
                 <Section
                   title="O que vem a seguir"
                   description="A navegação pode ser renomeada a qualquer momento pelo menu acima."
@@ -89,9 +130,9 @@ export default function ManageNavigationMapScreen() {
                       description="Entradas, banheiros, elevadores, escadas e balcões de informação."
                     />
                     <UpcomingItem
-                      icon="vector-polyline"
-                      title="Conexões"
-                      description="Os caminhos que ligam os pontos, com largura, rampas e presença de escadas."
+                      icon="wheelchair-accessibility"
+                      title="Acessibilidade dos caminhos"
+                      description="Largura, rampa e presença de escadas em cada caminho registrado."
                     />
                   </Card>
                 </Section>
@@ -117,7 +158,7 @@ export default function ManageNavigationMapScreen() {
 }
 
 type UpcomingItemProps = {
-  icon: 'map-marker-multiple-outline' | 'vector-polyline';
+  icon: 'map-marker-multiple-outline' | 'wheelchair-accessibility';
   title: string;
   description: string;
 };

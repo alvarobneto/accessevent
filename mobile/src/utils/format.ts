@@ -9,6 +9,26 @@ export function formatDate(value: string): string {
   return Number.isNaN(parsed.getTime()) ? '—' : DATE_FORMAT.format(parsed);
 }
 
+/**
+ * Data e hora da gravação, para a lista de caminhos.
+ *
+ * Com hora junto porque duas caminhadas no mesmo dia são a regra em um pavilhão —
+ * quem percorre o térreo de manhã e o mezaninho à tarde precisa ver qual trajeto
+ * é qual, e `02/09/2026` não diz nada disso.
+ */
+const DATE_TIME_FORMAT = new Intl.DateTimeFormat('pt-BR', {
+  day: '2-digit',
+  month: '2-digit',
+  year: 'numeric',
+  hour: '2-digit',
+  minute: '2-digit',
+});
+
+export function formatDateTime(value: string): string {
+  const parsed = new Date(value);
+  return Number.isNaN(parsed.getTime()) ? '—' : DATE_TIME_FORMAT.format(parsed);
+}
+
 /** Datas vindas da API em `YYYY-MM-DD`, exibidas como `dd/mm/aaaa`. */
 const ISO_DATE_PATTERN = /^(\d{4})-(\d{2})-(\d{2})$/;
 

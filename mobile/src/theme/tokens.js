@@ -165,6 +165,18 @@ const headerTheme = {
   headerShadowVisible: false,
   headerLargeTitleShadowVisible: false,
   headerBlurEffect: 'systemChromeMaterial',
+  // O `react-native-screens` liga o efeito de borda de rolagem por padrão
+  // (`automatic`) e avisa quando ele vem junto com um `blurEffect`, porque em iOS 26
+  // os dois se sobrepõem. O blur do header é escolha nossa e vale em toda versão do
+  // iOS, então o efeito automático é desligado nas quatro bordas: o contrário
+  // deixaria o header com aparência diferente conforme a versão do sistema, e o
+  // `design.md` não pede isso.
+  scrollEdgeEffects: {
+    top: 'hidden',
+    bottom: 'hidden',
+    left: 'hidden',
+    right: 'hidden',
+  },
   contentStyle: { backgroundColor: colors.surface },
 };
 

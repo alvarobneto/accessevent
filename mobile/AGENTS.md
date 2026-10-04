@@ -66,11 +66,12 @@ src/
 │   ├── ui/         # primitivos (Button, Card, Input, DateField, Menu, Alert, Dialog, Text, Icon…)
 │   ├── map/        # EventMap: base do mapa, marcadores e trajetos
 │   ├── delete-action.tsx # apagar evento/navegação com confirmação (só organizador)
+│   ├── path-list.tsx # caminhos registrados no hub + apagar por linha (Sprint 5)
 │   ├── screen.tsx    # shell com SafeArea + scroll opcional
 │   ├── section.tsx   # título + ação de seção
 │   └── async-content.tsx # estados loading/error/empty de listas
 ├── config/         # env access — process.env must be read statically (expo/no-dynamic-env-var)
-├── data/           # AppRepository + implementação em memória (types, repository, inMemoryRepository)
+├── data/           # AppRepository + implementações http e em memória (types, repository, http, inMemory)
 ├── hooks/          # reusable data/logic hooks (useAsyncData, useRefreshOnFocus, usePathRecording)
 ├── services/       # API client, health, location
 ├── theme/          # design tokens em JS (fonte de verdade) + tipos
@@ -201,6 +202,22 @@ contrastes está em `src/theme/tokens.js`.
   pelo Expo Router só aceita template com prefixo literal; extrair o caminho para uma variável o
   vira `string` e o `typecheck` recusa. Por isso os menus montam o ternário do modo dentro do
   `onSelect`.
+- **A ação do menu espera um frame antes de navegar** (`src/components/ui/menu.tsx`). O
+  `onPressAction` chega com o menu nativo ainda se fechando e quase toda ação nossa muda de tela.
+  No iOS o `MenuView` do `@expo/ui` é um `UIHostingController` do SwiftUI: navegar no mesmo tick
+  desmonta o controller de onde o menu se apresenta, e o iOS avisa que isso dá inset de safe area
+  errado e **vira exceção em uma versão futura**. No Android o `DropdownMenu` do Material já
+  fechou quando a ação chega, então o `requestAnimationFrame` não muda nada lá.
+- **O array de ações do menu é memoizado pelo conteúdo** (`JSON.stringify` de `id`, `label` e
+  `destructive`), não pela identidade do array. As telas montam `items` dentro do render, e um
+  array novo a cada render fazia o menu nativo tentar se atualizar à toa — é o
+  `updateVisibleMenuWithBlock: while no context menu is visible` que o iOS reclamava. O
+  `onSelect` continua sendo procurado no `items` do render atual, que é o callback novo.
+- **`headerTheme` desliga o `scrollEdgeEffects` do `react-native-screens`** (`src/theme/tokens.js`).
+  A biblioteca liga o efeito de borda de rolagem por padrão (`automatic`) e avisa quando ele vem
+  junto de um `blurEffect`, porque em iOS 26 os dois se sobrepõem. O `headerBlurEffect` é escolha
+  nossa e vale em toda versão do iOS, então quem desliga é o efeito automático, nas quatro bordas:
+  o contrário deixaria o header com aparência diferente conforme a versão do sistema.
 - **Ação irreversível mora no corpo da tela, não no menu.** Apagar evento e apagar navegação usam o
   `DeleteAction` (`src/components/delete-action.tsx`), que fica no fim da tela de detalhes do
   organizador. O menu de três pontinhos é para o que se refaz; apagar não se refaz, e item de menu
@@ -221,7 +238,7 @@ contrastes está em `src/theme/tokens.js`.
 /organizer/event/[eventId]/details      Detalhes do evento (descrição, período, criado/atualizado em)
 /organizer/event/[eventId]/edit         Editar evento
 /organizer/event/[eventId]/map/new      Criar navegação
-/organizer/event/[eventId]/map/[mapId]  Gerenciar navegação: hub do mapa + "Mapear novo caminho"
+/organizer/event/[eventId]/map/[mapId]  Gerenciar navegação: hub do mapa, caminhos registrados e "Mapear novo caminho"
 /organizer/event/[eventId]/map/[mapId]/record    Gravar um caminho novo (Sprint 4)
 /organizer/event/[eventId]/map/[mapId]/details  Detalhes da navegação (criada/atualizada em)
 /organizer/map/[mapId]                  Editar navegação (título; caminhos e pontos nas Sprints 5 a 8)
@@ -331,11 +348,46 @@ botão "Mapear novo caminho"; a gravação vive na rota ao lado.
   `allowsBackgroundLocationUpdates` no iOS, e está fora do MVP (PRD §30).
 - **Nada na gravação toca a rede**, que é o que faz o RNF05 valer sem fila: perda temporária de
   conexão não interrompe o mapeamento.
-- **`finalize` ainda não salva.** A tela diz isso em vez de fingir que gravou; a Sprint 5 troca o
-  aviso pelo `POST /paths`. O que ela já entrega é a `MapGeometry` e a distância em metros que o
-  `Path` vai gravar.
+- **`finalize` fecha o trajeto; gravar é uma confirmação à parte.** A tela de resumo
+  mostra tempo, distância e contagem de pontos, e o botão "Salvar no mapa" faz o
+  `POST /paths`. Antes de confirmar, o caminho existe só em memória: foi a decisão
+  para que uma gravação acidental não vire linha no banco sem a pessoa pedir. O
+  erro do `ApiError` aparece na tela e o trajeto continua em memória, para tentar de
+  novo sem percorrer o local outra vez. Um trajeto com menos de dois pontos nem
+  habilita o botão.
+- **A distância não vai no corpo do `POST`.** A API deriva o valor da geometria e
+  devolve o caminho salvo — o que a tela mostra e o que fica gravado vêm da mesma
+  conta, e o cálculo de rota da Sprint 16 ordena distâncias. `geometryLengthInMeters`
+  em `utils/geo.ts` existe para o repositório em memória concordar com a API; a
+  gravação **não** usa a função, porque somar trecho a trecho a cada leitura é o que
+  mantém o cálculo linear no tamanho do trajeto.
 - `watchPosition` põe o callback de erro **depois** do de posição porque é a assinatura que chama:
   `watchPositionAsync(qualidades, callback, onError)`.
+
+## Caminhos no hub (Sprint 5)
+
+`map/[mapId]` é o hub: mostra o mapa com os caminhos já gravados, tem o botão de
+gravar novo e a lista do que existe. A gravação ficou na rota ao lado, então a lista
+não é empurrada para baixo por um painel de GPS.
+
+- **Navegação e caminhos são dois `useAsyncData`**, e não um só com `Promise.all`: a
+  lista falhar não pode trocar o mapa da tela por um erro, e o mapa é o conteúdo
+  principal do hub. O `useRefreshOnFocus` recarrega os dois, porque quem salva é a
+  tela de gravação e a tela não é remontada ao voltar.
+- **A lista só desenha polilinha com dois pontos válidos.** `polylinesFromPaths`
+  (`utils/mapContent.ts`, com teste) decide isso no mesmo lugar do `EventMap`, que
+  filtra coordenada inválida na borda do desenho. O `tone` fica no padrão: cor de
+  trajeto só muda quando existe um contexto — a rota em destaque da Sprint 18 — e
+  pintar um caminho de "verde" para sugerir que ele serve seria vender o que o PRD
+  §19 diz que ninguém verificou.
+- **Caminho não tem nome ainda.** A linha mostra distância, quantos pontos entraram
+  no trajeto e data **com hora**, porque duas caminhadas no mesmo dia são a regra em
+  um pavilhão. Nomear, editar e selecionar chegam na Sprint 6.
+- **Apagar caminho é por linha, com `Dialog` destrutivo**, repetindo distância e data
+  para ninguém apagar o trajeto errado, e com o botão ocupado enquanto o pedido está
+  em voo. É a regra do `DeleteAction` aplicada a uma lista: ação irreversível no
+  corpo da tela, nunca no menu do cabeçalho. O `DeleteAction` continua sendo das
+  telas de detalhes (evento e navegação), que têm um registro só.
 
 ### Provider
 
@@ -413,7 +465,8 @@ os APKs de release passam a ser arm64-only e isso precisa ser uma decisão consc
 
 `src/data/repository.ts` define `AppRepository` (async: `listEvents`, `createEvent`, `getEvent`,
 `updateEvent`, `deleteEvent`, `listNavigationMaps`, `createNavigationMap`, `getNavigationMap`,
-`renameNavigationMap`, `deleteNavigationMap`). O singleton exportado por `src/data/index.ts` escolhe a implementação por
+`renameNavigationMap`, `deleteNavigationMap`, `listPaths`, `createPath`, `getPath`, `deletePath`).
+O singleton exportado por `src/data/index.ts` escolhe a implementação por
 `EXPO_PUBLIC_DATA_SOURCE`:
 
 - `api` (padrão) → `createHttpRepository()`, que fala com o NestJS em `EXPO_PUBLIC_API_URL`.
@@ -423,6 +476,14 @@ os APKs de release passam a ser arm64-only e isso precisa ser uma decisão consc
 As telas importam só `repository`, então trocar de fonte (ou adicionar persistência local do RNF05
 atrás de `src/data/`) não toca em nenhuma tela. Erros da API chegam como `ApiError`, que extrai a
 mensagem pt-BR do corpo NestJS — as telas exibem esse texto em vez de uma mensagem genérica.
+
+**O repositório em memória é uma segunda implementação do mesmo contrato, não um
+atalho.** Onde a API tem regra, a implementação em memória tem a mesma: a distância
+do caminho sai de `geometryLengthInMeters` com o mesmo arredondamento do backend,
+um trajeto de comprimento zero é recusado com a mesma frase, e apagar um evento ou
+uma navegação leva os caminhos junto, como o `ON DELETE CASCADE` do Postgres. Sem
+isso o time desenvolve contra um comportamento que a API não tem — e o defeito só
+aparece em produção.
 
 The prototype has no authentication and a single organizer: the role chosen on `/` only decides
 which stack opens (`router.replace`), there is no session, no permission check and no server.

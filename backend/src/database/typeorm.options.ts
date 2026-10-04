@@ -4,7 +4,9 @@ import type { DataSourceOptions } from 'typeorm';
 import type { DatabaseSettings } from '../config/env.validation.js';
 import { EventEntity } from '../events/event.entity.js';
 import { MapEntity } from '../maps/map.entity.js';
+import { PathEntity } from '../paths/path.entity.js';
 import { CreateEventsAndMaps1730000000000 } from './migrations/1730000000000-CreateEventsAndMaps.js';
+import { CreatePaths1730000001000 } from './migrations/1730000001000-CreatePaths.js';
 
 /**
  * Entidades e migrações ficam declaradas aqui, e não só via `autoLoadEntities`,
@@ -12,9 +14,12 @@ import { CreateEventsAndMaps1730000000000 } from './migrations/1730000000000-Cre
  * passar pelo ciclo de vida do Nest. `autoLoadEntities` continua ligado para que
  * os módulos registrem entidades novas com `forFeature`.
  */
-export const entities = [EventEntity, MapEntity];
+export const entities = [EventEntity, MapEntity, PathEntity];
 
-export const migrations = [CreateEventsAndMaps1730000000000];
+export const migrations = [
+  CreateEventsAndMaps1730000000000,
+  CreatePaths1730000001000,
+];
 
 /**
  * Opções do TypeORM compartilhadas pela aplicação (`AppModule`) e pelo runner de

@@ -342,11 +342,17 @@ describe('/events (e2e)', () => {
   });
 
   it('rejeita campos fora do contrato, como organizerId', async () => {
-    await request(app.getHttpServer())
+    const response = await request(app.getHttpServer())
       .post('/events')
       .send({ name: 'Feira', organizerId: 'user-1' })
       .expect(400);
 
+    // A tradução do campo desconhecido vem do pipe global, então vale para todo
+    // endpoint com DTO. O texto padrão do class-validator é em inglês, e é o app
+    // que mostra essa frase na tela.
+    expect(response.body.message).toEqual([
+      'O campo "organizerId" não faz parte deste recurso.',
+    ]);
     expect(rows).toHaveLength(0);
   });
 

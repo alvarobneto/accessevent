@@ -1,4 +1,6 @@
-import type { Event, NavigationMap } from './types';
+import type { MapGeometry } from '@/types/map';
+
+import type { Event, NavigationMap, Path } from './types';
 
 export type NewEvent = {
   name: string;
@@ -15,6 +17,17 @@ export type EventChanges = Partial<NewEvent>;
 export type NewNavigationMap = {
   eventId: string;
   name: string;
+};
+
+/**
+ * Caminho a gravar: a navegação dona dele e o trajeto.
+ *
+ * Sem `distance` de propósito — a API deriva o valor da geometria e devolvê-lo
+ * errado seria aceitar dois números para a mesma medida.
+ */
+export type NewPath = {
+  mapId: string;
+  geometry: MapGeometry;
 };
 
 /**
@@ -36,4 +49,11 @@ export interface AppRepository {
   getNavigationMap(mapId: string): Promise<NavigationMap | null>;
   renameNavigationMap(mapId: string, name: string): Promise<NavigationMap>;
   deleteNavigationMap(mapId: string): Promise<void>;
+
+  /** Caminhos da navegação, na ordem em que foram gravados. */
+  listPaths(mapId: string): Promise<Path[]>;
+  createPath(input: NewPath): Promise<Path>;
+  getPath(pathId: string): Promise<Path | null>;
+  /** `DELETE /paths/:pathId`: apaga o caminho e tira o trajeto do mapa. */
+  deletePath(pathId: string): Promise<void>;
 }

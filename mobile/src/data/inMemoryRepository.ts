@@ -1,5 +1,13 @@
-import type { AppRepository, EventChanges, NewEvent, NewNavigationMap } from './repository';
-import type { Event, NavigationMap } from './types';
+import { geometryLengthInMeters } from '@/utils/geo';
+
+import type {
+  AppRepository,
+  EventChanges,
+  NewEvent,
+  NewNavigationMap,
+  NewPath,
+} from './repository';
+import type { Event, NavigationMap, Path } from './types';
 
 /**
  * Implementação em memória do `AppRepository`.
@@ -7,11 +15,13 @@ import type { Event, NavigationMap } from './types';
  * O estado vive no escopo do módulo: sobrevive à navegação entre telas e é
  * descartado quando o app fecha. Serve para desenvolver e demonstrar a interface
  * sem a API no ar (`EXPO_PUBLIC_DATA_SOURCE=memory`), e espelha as mesmas
- * regras da implementação HTTP — inclusive os `null` dos campos opcionais.
+ * regras da implementação HTTP — inclusive os `null` dos campos opcionais, o
+ * cálculo da distância e o `ON DELETE CASCADE` do banco.
  */
 export function createInMemoryRepository(): AppRepository {
   const events: Event[] = [];
   const navigationMaps: NavigationMap[] = [];
+  const paths: Path[] = [];
   let sequence = 0;
 
   const nextId = (prefix: string) => `${prefix}-${++sequence}`;
@@ -74,10 +84,17 @@ export function createInMemoryRepository(): AppRepository {
 
       events.splice(index, 1);
 
-      // Espelha o `ON DELETE CASCADE` do banco: as navegações do evento vão junto.
-      const kept = navigationMaps.filter((map) => map.eventId !== eventId);
+      // Espelha o `ON DELETE CASCADE` do banco: as navegações do evento e os
+      // caminhos delas vão junto.
+      const keptMaps = navigationMaps.filter((map) => map.eventId !== eventId);
+      const removedMapIds = new Set(
+        navigationMaps.filter((map) => map.eventId === eventId).map((map) => map.id),
+      );
+      const keptPaths = paths.filter((path) => !removedMapIds.has(path.mapId));
       navigationMaps.length = 0;
-      navigationMaps.push(...kept);
+      navigationMaps.push(...keptMaps);
+      paths.length = 0;
+      paths.push(...keptPaths);
     },
 
     async listNavigationMaps(eventId: string) {
@@ -125,6 +142,55 @@ export function createInMemoryRepository(): AppRepository {
       }
 
       navigationMaps.splice(index, 1);
+
+      // Os caminhos da navegação somem com ela, como no `ON DELETE CASCADE`.
+      const kept = paths.filter((path) => path.mapId !== mapId);
+      paths.length = 0;
+      paths.push(...kept);
+    },
+
+    async listPaths(mapId) {
+      return paths.filter((path) => path.mapId === mapId);
+    },
+
+    async createPath({ mapId, geometry }: NewPath) {
+      if (!navigationMaps.some((map) => map.id === mapId)) {
+        throw new Error('Não foi possível salvar: a navegação não existe mais.');
+      }
+
+      // Mesma conta e mesmo arredondamento da API: o repositório em memória existe
+      // para a interface ficar utilizável, não para divergir do backend.
+      const distance = geometryLengthInMeters(geometry);
+
+      if (distance === 0) {
+        throw new Error('O caminho registrado tem comprimento zero. Grave o trajeto de novo.');
+      }
+
+      const timestamp = now();
+      const path: Path = {
+        id: nextId('caminho'),
+        mapId,
+        geometry,
+        distance,
+        createdAt: timestamp,
+        updatedAt: timestamp,
+      };
+      paths.push(path);
+      return path;
+    },
+
+    async getPath(pathId) {
+      return paths.find((path) => path.id === pathId) ?? null;
+    },
+
+    async deletePath(pathId) {
+      const index = paths.findIndex((path) => path.id === pathId);
+
+      if (index < 0) {
+        throw new Error('Não foi possível apagar: o caminho não existe mais.');
+      }
+
+      paths.splice(index, 1);
     },
   };
 }
