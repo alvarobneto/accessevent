@@ -243,6 +243,8 @@ contrastes está em `src/theme/tokens.js`.
 /organizer/event/[eventId]/map/[mapId]/details  Detalhes da navegação (criada/atualizada em)
 /organizer/map/[mapId]                  Editar navegação (título; caminhos e pontos nas Sprints 5 a 8)
 /user                    Eventos para consulta
+/user/categories           Categorias com eventos cadastrados e a contagem de cada uma
+/user/categories/[category]  Eventos da categoria
 /user/event/[eventId]      Navegações do evento
 /user/event/[eventId]/details  Detalhes do evento (mesmos dados, sem edição)
 /user/map/[mapId]          Mapa da navegação (o EventMap; caminhos e pontos nas Sprints 5 a 8)
@@ -463,7 +465,8 @@ os APKs de release passam a ser arm64-only e isso precisa ser uma decisão consc
 
 ## Data layer
 
-`src/data/repository.ts` define `AppRepository` (async: `listEvents`, `createEvent`, `getEvent`,
+`src/data/repository.ts` define `AppRepository` (async: `listEvents(category?)`,
+`listEventCategories`, `createEvent`, `getEvent`,
 `updateEvent`, `deleteEvent`, `listNavigationMaps`, `createNavigationMap`, `getNavigationMap`,
 `renameNavigationMap`, `deleteNavigationMap`, `listPaths`, `createPath`, `getPath`, `deletePath`).
 O singleton exportado por `src/data/index.ts` escolhe a implementação por
