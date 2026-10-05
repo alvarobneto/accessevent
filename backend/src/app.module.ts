@@ -8,10 +8,12 @@ import {
   type DatabaseSettings,
 } from './config/env.validation.js';
 import { buildTypeOrmOptions } from './database/typeorm.options.js';
+import { AuthModule } from './auth/auth.module.js';
 import { EventsModule } from './events/events.module.js';
 import { HealthModule } from './health/health.module.js';
 import { MapsModule } from './maps/maps.module.js';
 import { PathsModule } from './paths/paths.module.js';
+import { UsersModule } from './users/users.module.js';
 
 @Module({
   imports: [
@@ -27,10 +29,12 @@ import { PathsModule } from './paths/paths.module.js';
       useFactory: (config: ConfigService) =>
         buildTypeOrmOptions(config.getOrThrow<DatabaseSettings>('database')),
     }),
-    HealthModule,
+    AuthModule,
     EventsModule,
+    HealthModule,
     MapsModule,
     PathsModule,
+    UsersModule,
   ],
 })
 export class AppModule {}
