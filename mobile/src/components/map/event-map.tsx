@@ -272,6 +272,12 @@ function DrawnMap({
             strokeWidth={STROKE_WIDTH}
             lineCap="round"
             lineJoin="round"
+            // `tappable` é o que liga o toque: sem ele o `react-native-maps`
+            // ignora o `onPress` da polilinha. Ele só é pedido quando existe
+            // callback, para não transformar todo trajeto em área de toque numa
+            // tela em que ninguém quer selecionar.
+            tappable={polyline.onPress !== undefined}
+            onPress={polyline.onPress}
           />
         ))}
 

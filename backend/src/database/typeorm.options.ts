@@ -10,12 +10,20 @@ import { CreateEventsAndMaps1730000000000 } from './migrations/1730000000000-Cre
 import { CreatePaths1730000001000 } from './migrations/1730000001000-CreatePaths.js';
 import { AddEventCategory1730000002000 } from './migrations/1730000002000-AddEventCategory.js';
 import { CreateUsers1730000003000 } from './migrations/1730000003000-CreateUsers.js';
+import { AddPathName1730000004000 } from './migrations/1730000004000-AddPathName.js';
 
 /**
  * Entidades e migrações ficam declaradas aqui, e não só via `autoLoadEntities`,
  * porque o runner de migrações (`data-source.ts`) precisa da lista completa sem
  * passar pelo ciclo de vida do Nest. `autoLoadEntities` continua ligado para que
  * os módulos registrem entidades novas com `forFeature`.
+ *
+ * **Esta lista é a porta de entrada das migrações, e ela é manual.** Um arquivo
+ * novo em `migrations/` que não entrar aqui compila, passa no typecheck e no lint
+ * e mesmo assim nunca roda: o TypeORM só conhece o que está neste array, então
+ * `show` responde "Banco atualizado" e `run` não aplica nada, sem erro. Ao criar
+ * uma migração, registre-a aqui — foi o que aconteceu com `AddPathName`, que só
+ * apareceu quando a coluna foi conferida no Postgres de verdade.
  */
 export const entities = [EventEntity, MapEntity, PathEntity, UserEntity];
 
@@ -24,6 +32,7 @@ export const migrations = [
   CreatePaths1730000001000,
   AddEventCategory1730000002000,
   CreateUsers1730000003000,
+  AddPathName1730000004000,
 ];
 
 /**

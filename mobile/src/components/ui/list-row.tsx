@@ -11,15 +11,29 @@ type ListRowProps = {
   /** Linha secundária, como data ou contagem. */
   meta?: string;
   icon?: ReactNode;
+  /** Conteúdo decorativo à direita, como a seta de "abre a tela". */
   trailing?: ReactNode;
+  /**
+   * Controle à direita que é **ação** — o botão de apagar de um caminho.
+   *
+   * Fica fora da área tocável da linha de propósito: dentro do `Pressable` da
+   * linha ele vira um botão dentro de outro botão, e o leitor de tela trata o
+   * conteúdo da linha como rótulo do botão externo — o botão interno some da
+   * navegação por VoiceOver e TalkBack. `trailing` continua sendo o lugar do
+   * enfeite, que não recebe toque próprio.
+   */
+  trailingAction?: ReactNode;
   onPress?: () => void;
   accessibilityLabel?: string;
   className?: string;
 };
 
 /**
- * Linha de lista. Serve para eventos e para navegações, com o mesmo formato:
- * ícone opcional, título, descrição e uma ação à direita.
+ * Linha de lista. Serve para eventos, para navegações e para caminhos, com o mesmo
+ * formato: ícone opcional, título, descrição e algo à direita.
+ *
+ * `trailing` e `trailingAction` são separados pelo que acontece no toque, não pela
+ * posição: o enfeite acompanha a linha e a ação tem o seu próprio alvo.
  */
 export function ListRow({
   title,
@@ -27,6 +41,7 @@ export function ListRow({
   meta,
   icon,
   trailing,
+  trailingAction,
   onPress,
   accessibilityLabel,
   className,
@@ -52,18 +67,26 @@ export function ListRow({
   );
 
   if (!onPress) {
-    return content;
+    return (
+      <View className="flex-row items-stretch gap-3">
+        <View className="flex-1">{content}</View>
+        {trailingAction}
+      </View>
+    );
   }
 
   return (
-    <Pressable
-      accessibilityRole="button"
-      accessibilityLabel={accessibilityLabel ?? title}
-      onPress={onPress}
-      className="rounded-lg active:opacity-70"
-    >
-      {content}
-    </Pressable>
+    <View className="flex-row items-stretch gap-3">
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel={accessibilityLabel ?? title}
+        onPress={onPress}
+        className="flex-1 rounded-lg active:opacity-70"
+      >
+        {content}
+      </Pressable>
+      {trailingAction}
+    </View>
   );
 }
 

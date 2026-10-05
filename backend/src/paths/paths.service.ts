@@ -9,6 +9,7 @@ import { Repository } from 'typeorm';
 import { MapEntity } from '../maps/map.entity.js';
 
 import type { CreatePathDto } from './dto/create-path.dto.js';
+import type { UpdatePathDto } from './dto/update-path.dto.js';
 import { PathEntity } from './path.entity.js';
 import { pathLengthInMeters } from './path-distance.js';
 import { toPathResponse, type PathResponse } from './path.response.js';
@@ -54,6 +55,27 @@ export class PathsService {
     }
 
     const path = this.paths.create({ mapId, geometry: dto.geometry, distance });
+
+    return toPathResponse(await this.paths.save(path));
+  }
+
+  /**
+   * Renomeia o caminho. Só o nome muda: o trajeto gravado e a distância não são
+   * reescritos aqui, e a distância continua sendo a conta da geometria que o
+   * servidor fez na gravação.
+   *
+   * Um corpo sem `name` não grava. O `PATCH` aceitaria `{}` — todos os campos do
+   * DTO são opcionais — e salvar assim marcaria `updatedAt` sem ter mudado
+   * nada, então a tela mostraria o caminho como editado quando ninguém editou.
+   */
+  async update(id: string, dto: UpdatePathDto): Promise<PathResponse> {
+    const path = await this.getEntityOrFail(id);
+
+    if (dto.name === undefined) {
+      return toPathResponse(path);
+    }
+
+    path.name = dto.name.trim();
 
     return toPathResponse(await this.paths.save(path));
   }

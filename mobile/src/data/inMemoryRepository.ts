@@ -190,6 +190,7 @@ export function createInMemoryRepository(): AppRepository {
         mapId,
         geometry,
         distance,
+        name: null,
         createdAt: timestamp,
         updatedAt: timestamp,
       };
@@ -199,6 +200,24 @@ export function createInMemoryRepository(): AppRepository {
 
     async getPath(pathId) {
       return paths.find((path) => path.id === pathId) ?? null;
+    },
+
+    async updatePath(pathId, changes) {
+      const path = paths.find((item) => item.id === pathId);
+
+      if (!path) {
+        throw new Error('Não foi possível salvar: o caminho não existe mais.');
+      }
+
+      // Corpo sem `name` é um PATCH que não muda nada, e a API não grava nesse
+      // caso: marcar `updatedAt` aqui faria a tela mostrar o caminho como editado
+      // quando ninguém editou.
+      if (changes.name !== undefined) {
+        path.name = changes.name.trim();
+        path.updatedAt = now();
+      }
+
+      return path;
     },
 
     async deletePath(pathId) {

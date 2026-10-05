@@ -33,6 +33,16 @@ export type NewPath = {
 };
 
 /**
+ * Campos que o `PATCH /paths/:pathId` aceita; todos são opcionais.
+ *
+ * Só o `name` por enquanto: o trajeto gravado não é reescrito por esse endpoint,
+ * e o editor de vértices vai precisar de um contrato próprio para isso.
+ */
+export type PathChanges = {
+  name?: string;
+};
+
+/**
  * Contrato de armazenamento.
  *
  * As telas só conhecem esta interface, então trocar entre a API do backend e o
@@ -58,6 +68,8 @@ export interface AppRepository {
   listPaths(mapId: string): Promise<Path[]>;
   createPath(input: NewPath): Promise<Path>;
   getPath(pathId: string): Promise<Path | null>;
+  /** `PATCH /paths/:pathId`: renomeia o caminho sem tocar no trajeto. */
+  updatePath(pathId: string, changes: PathChanges): Promise<Path>;
   /** `DELETE /paths/:pathId`: apaga o caminho e tira o trajeto do mapa. */
   deletePath(pathId: string): Promise<void>;
 }

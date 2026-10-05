@@ -7,10 +7,13 @@ import { repository } from '@/data';
 import type { Path } from '@/data/types';
 import { colors } from '@/theme/tokens';
 import { toErrorMessage } from '@/utils/errors';
-import { formatDateTime, formatDistance } from '@/utils/format';
+import { formatDateTime } from '@/utils/format';
+import { pathLabels } from '@/utils/pathLabel';
 
 type PathListProps = {
   paths: readonly Path[];
+  /** Abre o editor de um caminho. */
+  onOpen: (pathId: string) => void;
   /** Recarrega a lista depois de apagar; quem chamou é que sabe como. */
   onChanged: () => void;
 };
@@ -18,25 +21,30 @@ type PathListProps = {
 /**
  * Caminhos registrados na navegação.
  *
- * Cada linha é um `Path` gravado (PRD §23): a distância estimada, quantos pontos
- * entraram no trajeto e quando a caminhada aconteceu. O caminho não tem nome
- * ainda — nomear e editar é da Sprint 6 — então o que identifica a linha é o que
- * a pessoa reconhece: onde andou, quanto deu e quando.
+ * Cada linha é um `Path` gravado (PRD §23): o nome que o organizador deu, a
+ * distância estimada, quantos pontos entraram no trajeto e quando a caminhada
+ * aconteceu. Caminho sem nome se anuncia pela distância, que é o que a pessoa
+ * reconhece — ver `pathLabels`.
+ *
+ * **A linha abre o editor do caminho, e o botão de apagar é ação à parte.** É a
+ * exceção ao combinado de "item de lista abre, menu edita", e ela é deliberada: o
+ * hub já é a tela do desenho, e o mapa é a informação que decide qual caminho se
+ * quer mexer. Editar pelo menu do cabeçalho obrigaria a abrir o caminho errado
+ * primeiro — o menu é do mapa, não da linha — e quem chega da gravação precisa
+ * renomear o trajeto que acabou de desenhar sem passar por outra lista.
  *
  * O botão de apagar fica na linha, e não no menu do cabeçalho, pelo mesmo motivo
- * do `DeleteAction`: apagar não se desfaz. A confirmação é o diálogo, que repete a
- * distância e a data para ninguém apagar o trajeto errado. Editar o caminho —
- * selecionar, mover pontos, apagar — é da Sprint 6, e é ela que vai dar o nome.
+ * do `DeleteAction`: apagar não se desfaz. A confirmação é o diálogo, que repete o
+ * nome e a data para ninguém apagar o trajeto errado. Ele é `trailingAction` e não
+ * `trailing` porque um botão dentro da área tocável da linha desaparece para o
+ * leitor de tela — ver `ListRow`.
  */
-export function PathList({ paths, onChanged }: PathListProps) {
+export function PathList({ paths, onOpen, onChanged }: PathListProps) {
   return (
-    <Section
-      title="Caminhos registrados"
-      description="Os trajetos que você percorreu, desenhados no mapa acima."
-    >
+    <Section title="Caminhos registrados" description="Toque em um caminho para renomeá-lo.">
       <View className="gap-3">
         {paths.map((path) => (
-          <PathRow key={path.id} path={path} onChanged={onChanged} />
+          <PathRow key={path.id} path={path} onOpen={() => onOpen(path.id)} onChanged={onChanged} />
         ))}
       </View>
     </Section>
@@ -45,17 +53,17 @@ export function PathList({ paths, onChanged }: PathListProps) {
 
 type PathRowProps = {
   path: Path;
+  onOpen: () => void;
   onChanged: () => void;
 };
 
-function PathRow({ path, onChanged }: PathRowProps) {
+function PathRow({ path, onOpen, onChanged }: PathRowProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const distance = formatDistance(path.distance);
+  const labels = pathLabels(path);
   const recordedAt = formatDateTime(path.createdAt);
-  const pointLabel = path.geometry.length === 1 ? 'ponto' : 'pontos';
 
   const closeDialog = () => {
     // Enquanto o pedido está em voo o diálogo não fecha: sumir no meio da operação
@@ -82,14 +90,16 @@ function PathRow({ path, onChanged }: PathRowProps) {
   return (
     <>
       <ListRow
-        title={`Caminho de ${distance}`}
-        description={`${path.geometry.length} ${pointLabel} no trajeto`}
+        title={labels.title}
+        description={labels.description}
         meta={`Gravado em ${recordedAt}`}
         icon={<Icon name="vector-polyline" size={20} color={colors.gray500} />}
-        trailing={
+        onPress={onOpen}
+        accessibilityLabel={`Editar o caminho ${labels.title}, gravado em ${recordedAt}`}
+        trailingAction={
           <IconButton
             icon="trash-can-outline"
-            accessibilityLabel={`Apagar caminho de ${distance}`}
+            accessibilityLabel={`Apagar o caminho ${labels.title}`}
             onPress={() => {
               setError(null);
               setIsOpen(true);
@@ -105,7 +115,7 @@ function PathRow({ path, onChanged }: PathRowProps) {
         icon="alert-outline"
         destructive
         title="Apagar caminho?"
-        description={`Caminho de ${distance}, gravado em ${recordedAt}. Esta ação não pode ser desfeita.`}
+        description={`${labels.title}, gravado em ${recordedAt}. Esta ação não pode ser desfeita.`}
         confirmLabel="Apagar"
         cancelLabel="Cancelar"
         confirmLoading={isDeleting}

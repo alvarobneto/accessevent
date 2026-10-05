@@ -13,6 +13,7 @@ type PathRow = {
   mapId: string;
   geometry: CoordinateTuple[];
   distance: number;
+  name: string | null;
   createdAt: Date;
   updatedAt: Date;
 };
@@ -29,6 +30,7 @@ function makeRow(overrides: Partial<PathRow> = {}): PathRow {
     mapId: 'map-1',
     geometry: TWO_POINTS,
     distance: 111.2,
+    name: null,
     createdAt: new Date('2026-09-02T10:00:00.000Z'),
     updatedAt: new Date('2026-09-02T10:00:00.000Z'),
     ...overrides,
@@ -173,9 +175,55 @@ describe('PathsService (unit)', () => {
       mapId: 'map-1',
       geometry: TWO_POINTS,
       distance: 111.2,
+      name: null,
       createdAt: '2026-09-02T10:00:00.000Z',
       updatedAt: '2026-09-02T10:00:00.000Z',
     });
+  });
+
+  it('trims the name it stores', async () => {
+    findOne.mockResolvedValue(makeRow());
+
+    const result = await service.update('path-1', {
+      name: '  Corredor central  ',
+    });
+
+    const [saved] = save.mock.calls[0] ?? [];
+    expect(saved?.name).toBe('Corredor central');
+    expect(result.name).toBe('Corredor central');
+  });
+
+  it('leaves the geometry and the distance alone when renaming', async () => {
+    findOne.mockResolvedValue(makeRow({ name: 'Antigo' }));
+
+    const result = await service.update('path-1', { name: 'Novo' });
+
+    expect(result.geometry).toEqual(TWO_POINTS);
+    expect(result.distance).toBe(111.2);
+  });
+
+  it('throws 404 when renaming an unknown path', async () => {
+    findOne.mockResolvedValue(null);
+
+    await expect(
+      service.update('missing', { name: 'Corredor central' }),
+    ).rejects.toMatchObject({
+      status: 404,
+    });
+
+    expect(save).not.toHaveBeenCalled();
+  });
+
+  it('does not save when the patch carries no name', async () => {
+    // Corpo `{}` é um PATCH que não muda nada. Gravar assim marcaria
+    // `updatedAt` sem qualquer alteração, e a tela mostraria o caminho como
+    // editado quando ninguém editou.
+    findOne.mockResolvedValue(makeRow({ name: 'Corredor central' }));
+
+    const result = await service.update('path-1', {});
+
+    expect(save).not.toHaveBeenCalled();
+    expect(result.name).toBe('Corredor central');
   });
 
   it('deletes the path it just found', async () => {

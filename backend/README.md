@@ -89,6 +89,14 @@ npx typeorm migration:generate src/database/migrations/NomeDaMudanca \
   -d dist/database/data-source.js
 ```
 
+**A lista em `typeorm.options.ts` é manual, e esquecê-la não dá erro.** O array
+`migrations` é a única coisa que o TypeORM conhece: um arquivo novo em
+`migrations/` que não for importado e adicionado ao array compila, passa no
+typecheck e no lint, e mesmo assim nunca roda — `migration:show` responde "Banco
+atualizado", `migration:run` responde "Banco já estava atualizado" e a coluna
+simplesmente não existe. Foi o que aconteceu com `AddPathName`, e só o `\d paths`
+no Postgres revelou. Registre a migração no array antes de rodar.
+
 O CLI exige que o arquivo do DataSource tenha **exatamente uma** exportação de
 instância — é por isso que `data-source.ts` exporta só `appDataSource`, sem `export
 default` ao lado. Se você acrescentar outro export exportado nesse arquivo, o
@@ -176,6 +184,34 @@ junto da publicação.
 
 `eventId` vem do caminho, e não do corpo: mandá-lo no `POST` é rejeitado com `400`.
 Apagar o evento apaga as navegações dele (`ON DELETE CASCADE`).
+
+### Caminhos
+
+`Path` do PRD §23 — o trajeto que o organizador percorreu. Os nós de ponta
+(`startNodeId`/`endNodeId`) e os atributos de acessibilidade chegam na Sprint 9;
+hoje o que existe é a geometria gravada, a distância que a API deriva dela e o
+nome que o organizador dá depois.
+
+| Método  | Rota                    | Corpo                                        |
+| ------- | ----------------------- | -------------------------------------------- |
+| `GET`   | `/maps/:mapId/paths`    | —                                            |
+| `POST`  | `/maps/:mapId/paths`    | `geometry` → `201`                           |
+| `GET`   | `/paths/:pathId`        | —                                            |
+| `PATCH` | `/paths/:pathId`        | `UpdatePathDto` (apenas `name`)              |
+| `DELETE`| `/paths/:pathId`        | —                                            |
+
+Três decisões do `PATCH /paths/:pathId`:
+
+- **Só `name`.** `geometry`, `distance`, `mapId` e os nós de ponta não fazem parte
+  do recurso: mandá-los volta `400` pelo `forbidNonWhitelisted`, e não são
+  ignorados em silêncio — quem acha que reposicionou o trajeto precisa ver o erro.
+- **Corpo `{}` é no-op.** Não dá para "limpar" o nome, e não há `name: null` no
+  `UpdatePathDto`: um caminho sem nome é o estado em que ele foi gravado, não um
+  estado a que se volta. `updatedAt` não é tocado quando nada muda, para a lista não
+  reordenar por causa de um `PATCH` que não salvou nada.
+- **`name` é gravado aparado e tem 120 caracteres**, pela regra de `IsBoundedName` —
+  o mesmo validador de `CreateMapDto` e do evento, em vez de uma quarta cópia da
+  mesma checagem.
 
 ## Convenções
 

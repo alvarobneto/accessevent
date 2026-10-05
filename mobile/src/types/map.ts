@@ -48,4 +48,14 @@ export type MapPolyline = {
   id: string;
   geometry: MapGeometry;
   tone?: MapTone;
+  /**
+   * Chamado quando alguém toca no trajeto.
+   *
+   * O evento de `polyline-press` traz um `id` que só existe no Google Maps do iOS
+   * (é opcional em `PolylinePressEvent`), então quem sabe qual caminho foi tocado
+   * é a própria polilinha, por fechamento — e não um único `onPolylinePress` no
+   * mapa. É o que o `react-native-maps` faz nas duas plataformas: o toque é
+   * despachado para a polilinha específica, não para o mapa.
+   */
+  onPress?: () => void;
 };

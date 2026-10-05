@@ -19,6 +19,10 @@ import { MapEntity } from '../maps/map.entity.js';
  * Nasce com o que a gravação da Sprint 4 produz — a geometria e a distância — e
  * ganha o resto por etapas, cada uma com sua migração:
  *
+ * - `name` na Sprint 6, quando o organizador passa a nomear o caminho em vez de
+ *   reconhecê-lo só por distância e data. Nulável para os caminhos que a
+ *   gravação já deixou sem nome.
+ *
  * - `startNodeId`/`endNodeId` na Sprint 7, quando existirem os pontos que são as
  *   pontas do caminho (PRD §8.2). Antes disso a coluna não pode existir: uma
  *   chave estrangeira para um nó que o app ainda não cria seria um `404` no meio
@@ -64,6 +68,20 @@ export class PathEntity {
    */
   @Column({ type: 'real' })
   distance: number;
+
+  /**
+   * Nome que o organizador deu ao caminho, ou `null` quando ele ainda não
+   * nomeou (Sprint 6).
+   *
+   * Nulável e não obrigatório na gravação: quem percorre o local primeiro grava
+   * o trajeto e depois o nomeia, e obrigar o nome no `POST` faria a tela de
+   * gravação da Sprint 4 pedir um dado que ela não tem onde pedir.
+   *
+   * Não é o que torna o caminho único: `id` é. Dois caminhos podem chamar
+   * "Corredor central" — o que os distingue é o trajeto.
+   */
+  @Column({ type: 'varchar', length: 120, nullable: true })
+  name: string | null;
 
   @CreateDateColumn({ type: 'timestamptz' })
   createdAt: Date;

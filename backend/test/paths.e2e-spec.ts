@@ -21,6 +21,7 @@ type PathRow = {
   mapId: string;
   geometry: CoordinateTuple[];
   distance: number;
+  name: string | null;
   createdAt: Date;
   updatedAt: Date;
 };
@@ -62,6 +63,7 @@ function createRepositoryMocks() {
         mapId: entity.mapId ?? EXISTING_MAP_ID,
         geometry: entity.geometry ?? [],
         distance: entity.distance ?? 0,
+        name: entity.name ?? null,
         createdAt: now,
         updatedAt: now,
       };
@@ -173,6 +175,160 @@ describe('/maps/:mapId/paths e /paths/:pathId (e2e)', () => {
 
     expect(response.body.id).toBe(created.body.id);
     expect(response.body.createdAt).toBe('2026-09-02T10:00:00.000Z');
+  });
+
+  it('renomeia um caminho e devolve 200 com o nome gravado', async () => {
+    const created = await request(app.getHttpServer())
+      .post(`/maps/${EXISTING_MAP_ID}/paths`)
+      .send({ geometry: L_TRAIL })
+      .expect(201);
+
+    const response = await request(app.getHttpServer())
+      .patch(`/paths/${created.body.id}`)
+      .send({ name: 'Corredor central' })
+      .expect(200);
+
+    expect(response.body.name).toBe('Corredor central');
+
+    const listed = await request(app.getHttpServer())
+      .get(`/maps/${EXISTING_MAP_ID}/paths`)
+      .expect(200);
+
+    expect(listed.body[0].name).toBe('Corredor central');
+  });
+
+  it('guarda o nome já sem as pontas em branco', async () => {
+    const created = await request(app.getHttpServer())
+      .post(`/maps/${EXISTING_MAP_ID}/paths`)
+      .send({ geometry: L_TRAIL })
+      .expect(201);
+
+    const response = await request(app.getHttpServer())
+      .patch(`/paths/${created.body.id}`)
+      .send({ name: '  Corredor central  ' })
+      .expect(200);
+
+    expect(response.body.name).toBe('Corredor central');
+  });
+
+  it('devolve o caminho sem nome quando ele ainda não foi nomeado', async () => {
+    const created = await request(app.getHttpServer())
+      .post(`/maps/${EXISTING_MAP_ID}/paths`)
+      .send({ geometry: L_TRAIL })
+      .expect(201);
+
+    expect(created.body.name).toBeNull();
+  });
+
+  it('não reescreve a geometria nem a distância ao renomear', async () => {
+    const created = await request(app.getHttpServer())
+      .post(`/maps/${EXISTING_MAP_ID}/paths`)
+      .send({ geometry: L_TRAIL })
+      .expect(201);
+
+    const response = await request(app.getHttpServer())
+      .patch(`/paths/${created.body.id}`)
+      .send({ name: 'Corredor central' })
+      .expect(200);
+
+    expect(response.body.geometry).toEqual(L_TRAIL);
+    expect(response.body.distance).toBe(111.2);
+  });
+
+  it('rejeita renomear com nome vazio ou só com espaços', async () => {
+    const created = await request(app.getHttpServer())
+      .post(`/maps/${EXISTING_MAP_ID}/paths`)
+      .send({ geometry: L_TRAIL })
+      .expect(201);
+
+    await request(app.getHttpServer())
+      .patch(`/paths/${created.body.id}`)
+      .send({ name: '' })
+      .expect(400)
+      .expect(({ body }) => {
+        expect(body.message).toEqual(['Informe o nome do caminho.']);
+      });
+
+    await request(app.getHttpServer())
+      .patch(`/paths/${created.body.id}`)
+      .send({ name: '   ' })
+      .expect(400);
+
+    expect(paths[0]?.name).toBeNull();
+  });
+
+  it('rejeita renomear com nome null em vez de fingir que gravou', async () => {
+    const created = await request(app.getHttpServer())
+      .post(`/maps/${EXISTING_MAP_ID}/paths`)
+      .send({ geometry: L_TRAIL })
+      .expect(201);
+
+    await request(app.getHttpServer())
+      .patch(`/paths/${created.body.id}`)
+      .send({ name: null })
+      .expect(400)
+      .expect(({ body }) => {
+        expect(body.message).toEqual(['O nome do caminho deve ser um texto.']);
+      });
+  });
+
+  it('rejeita geometria enviada no PATCH de renomear', async () => {
+    // A geometria gravada não é reescrita por aqui: reescrever o trajeto de um
+    // caminho a partir do endpoint do nome seria um `PATCH` de nome destruindo a
+    // geometria que o organizador percorreu.
+    const created = await request(app.getHttpServer())
+      .post(`/maps/${EXISTING_MAP_ID}/paths`)
+      .send({ geometry: L_TRAIL })
+      .expect(201);
+
+    await request(app.getHttpServer())
+      .patch(`/paths/${created.body.id}`)
+      .send({
+        name: 'Corredor central',
+        geometry: [
+          [0, 0],
+          [0.001, 0.001],
+        ],
+      })
+      .expect(400)
+      .expect(({ body }) => {
+        expect(body.message).toEqual([
+          'O campo "geometry" não faz parte deste recurso.',
+        ]);
+      });
+
+    const stored = await request(app.getHttpServer())
+      .get(`/paths/${created.body.id}`)
+      .expect(200);
+
+    expect(stored.body.geometry).toEqual(L_TRAIL);
+  });
+
+  it('rejeita nome com mais de 120 caracteres', async () => {
+    const created = await request(app.getHttpServer())
+      .post(`/maps/${EXISTING_MAP_ID}/paths`)
+      .send({ geometry: L_TRAIL })
+      .expect(201);
+
+    await request(app.getHttpServer())
+      .patch(`/paths/${created.body.id}`)
+      .send({ name: 'x'.repeat(121) })
+      .expect(400)
+      .expect(({ body }) => {
+        expect(body.message).toEqual([
+          'O nome do caminho deve ter no máximo 120 caracteres.',
+        ]);
+      });
+  });
+
+  it('devolve 404 ao renomear caminho inexistente', async () => {
+    await request(app.getHttpServer())
+      .patch('/paths/00000000-0000-0000-0000-000000000000')
+      .send({ name: 'Corredor central' })
+      .expect(404)
+      .expect(({ body }) => {
+        expect(body.message).toBe('Caminho não encontrado.');
+      });
   });
 
   it('apaga um caminho e devolve 204 sem corpo', async () => {

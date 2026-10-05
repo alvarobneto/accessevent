@@ -180,7 +180,12 @@ contrastes está em `src/theme/tokens.js`.
   novamente ou editá-los é ação do menu de três pontinhos do cabeçalho (`src/components/ui/menu.tsx`,
   que é o `MenuView` do `@expo/ui`). Isso vale para eventos e para navegações, e vale para os dois
   lados: nenhum item de lista abre direto no editor. Editar dado direto da lista mostrava um editor
-  sem contexto e escondia o resto do que a tela mostra.
+  sem contexto e escondia o resto do que a tela mostra. **A única exceção é a linha de caminho
+  (`PathList`), que abre o editor do caminho** — decisão da Sprint 6, e por dois motivos que não
+  valem para evento e navegação: o menu de três pontinhos é _do mapa_, não da linha, então editar
+  por ele obrigaria abrir o caminho errado primeiro; e quem chega da gravação precisa renomear o
+  trajeto que acabou de desenhar. O editor compensa o contexto que a regra queria preservar
+  mostrando distância, pontos e data.
 - **Tela que mostra dado que outra tela escreve recarrega no foco.** Uma tela de pilha do Expo
   Router não é remontada ao voltar, então `useAsyncData` — que carrega na montagem — continuaria
   exibindo o snapshot antigo. Toda tela que exibe uma lista ou um registro mutável de outra tela
@@ -240,6 +245,7 @@ contrastes está em `src/theme/tokens.js`.
 /organizer/event/[eventId]/map/new      Criar navegação
 /organizer/event/[eventId]/map/[mapId]  Gerenciar navegação: hub do mapa, caminhos registrados e "Mapear novo caminho"
 /organizer/event/[eventId]/map/[mapId]/record    Gravar um caminho novo (Sprint 4)
+/organizer/event/[eventId]/map/[mapId]/path/[pathId]  Editar caminho (o nome; Sprint 6)
 /organizer/event/[eventId]/map/[mapId]/details  Detalhes da navegação (criada/atualizada em)
 /organizer/map/[mapId]                  Editar navegação (título; caminhos e pontos nas Sprints 5 a 8)
 /user                    Eventos para consulta
@@ -382,9 +388,44 @@ não é empurrada para baixo por um painel de GPS.
   trajeto só muda quando existe um contexto — a rota em destaque da Sprint 18 — e
   pintar um caminho de "verde" para sugerir que ele serve seria vender o que o PRD
   §19 diz que ninguém verificou.
-- **Caminho não tem nome ainda.** A linha mostra distância, quantos pontos entraram
-  no trajeto e data **com hora**, porque duas caminhadas no mesmo dia são a regra em
-  um pavilhão. Nomear, editar e selecionar chegam na Sprint 6.
+- **Caminho tem nome desde a Sprint 6.** A linha da lista mostra o nome que o
+  organizador deu e cai para "Caminho de <distância>" quando não há nome — não
+  para um título vazio nem para "sem nome", que é ausência de dado, não estado que
+  a interface precise explicar. O cálculo está em `pathLabels`
+  (`utils/pathLabel.ts`, com teste) e não no componente, porque é regra de
+  apresentação com casos que quebram em silêncio: nome vazio, nome só com espaço,
+  geometria de um ponto só.
+- **Selecionar caminho tem duas portas: a linha da lista e o trajeto no mapa.** A
+  lista é a que tem alvo de toque grande e nome legível; o toque no trajeto é o
+  atalho de quem está olhando o desenho. O `onPress` mora em **cada** polilinha
+  (`MapPolyline.onPress`), não em um callback único no `EventMap`, porque o
+  `PolylinePressEvent` do `react-native-maps` só traz `id` no Google Maps do iOS —
+  é opcional no tipo. O toque é despachado para a polilinha específica nas duas
+  plataformas (`MapView.java` no Android faz `polylineMap.get(polyline).getId()`),
+  então o fechamento por polilinha funciona igual nos dois. `tappable` só é pedido
+  quando existe `onPress`, para não transformar todo trajeto em área de toque numa
+  tela em que ninguém quer selecionar.
+- **O trajeto do mapa é um alvo de toque fino, e isso é uma escolha consciente.**
+  A linha desenhada tem 4px e o `react-native-maps` não expõe `hitSlop` no
+  `Polyline`, então o alvo real do toque no mapa é o próprio traço. Dá para
+  desenhar uma segunda polilinha transparente e mais grossa por baixo para
+  engordar o alvo, mas isso não foi feito porque o hit-test transparente só dá
+  para confirmar em aparelho, e um alvo de toque quebrado é pior do que um alvo
+  pequeno. O caminho acessível para quem usa leitor de tela é a lista — por isso o
+  `accessibilityLabel` do mapa fala quantos caminhos existem e a lista é a porta
+  principal. Se a Sprint 7 mexer nisso, é o lugar.
+- **Editar caminho é tela própria** (`/path/[pathId]`), aberta pela linha ou pelo
+  trajeto, e salva por botão explícito ("Salvar alterações") em vez de a cada tecla:
+  o nome é do organizador e ele decide quando ele está bom. O editor muda **só o
+  nome** — geometria vem da gravação (Sprint 4) e acessibilidade é da Sprint 9 — e
+  por isso mostra distância, contagem de pontos e data como contexto, que é o que
+  quem chegou por toque no trajeto não tem na frente.
+- **Excluir caminho continua por linha**, com o `Dialog` destrutivo da Sprint 5.
+  O botão de apagar é `trailingAction` do `ListRow`, não `trailing`: `trailing` fica
+  **dentro** da área tocável da linha, e um botão dentro do botão da linha
+  desaparece para o leitor de tela, que trata o conteúdo da linha como rótulo do
+  botão externo. É a única diferença entre os dois props e ela é sobre toque, não
+  sobre posição.
 - **Apagar caminho é por linha, com `Dialog` destrutivo**, repetindo distância e data
   para ninguém apagar o trajeto errado, e com o botão ocupado enquanto o pedido está
   em voo. É a regra do `DeleteAction` aplicada a uma lista: ação irreversível no
@@ -468,7 +509,8 @@ os APKs de release passam a ser arm64-only e isso precisa ser uma decisão consc
 `src/data/repository.ts` define `AppRepository` (async: `listEvents(category?)`,
 `listEventCategories`, `createEvent`, `getEvent`,
 `updateEvent`, `deleteEvent`, `listNavigationMaps`, `createNavigationMap`, `getNavigationMap`,
-`renameNavigationMap`, `deleteNavigationMap`, `listPaths`, `createPath`, `getPath`, `deletePath`).
+`renameNavigationMap`, `deleteNavigationMap`, `listPaths`, `createPath`, `getPath`,
+`updatePath`, `deletePath`).
 O singleton exportado por `src/data/index.ts` escolhe a implementação por
 `EXPO_PUBLIC_DATA_SOURCE`:
 

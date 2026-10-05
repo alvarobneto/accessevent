@@ -371,12 +371,43 @@ O organizador consegue:
 
 ### Sprint 6 — Editor de mapa
 
-* [ ] Selecionar caminho.
-* [ ] Editar caminho.
-* [ ] Excluir caminho.
-* [ ] Adicionar ponto.
-* [ ] Mover ponto.
-* [ ] Excluir ponto.
+Escopo desta sprint: **selecionar e editar o caminho** (o nome dele). Adicionar,
+mover e excluir ponto são da Sprint 7, junto com os pontos de interesse.
+
+* [x] `Path` ganha `name` — opcional, anulável e de até 120 caracteres, gravado
+      aparado. Caminho já registrado continua sem nome, e a migração
+      `AddPathName1730000004000` não inventa um para os que já existiam.
+* [x] `PATCH /paths/:pathId` aceita **só** `name`. Geometria, distância e os nós
+      de ponta não entram no corpo: mandá-los volta 400 em vez de ignorar em
+      silêncio, para ninguém achar que reposicionou o trajeto.
+* [x] Corpo `{}` é no-op e não mexe em `updatedAt`; `name: null` volta 400 com
+      **uma** mensagem, e o mesmo validador (`IsBoundedName`) serve para mapa,
+      evento e caminho, em vez de três cópias da mesma regra.
+* [x] Selecionar caminho é pela **linha da lista e pelo trajeto no mapa**. O toque
+      no trajeto mora em cada polilinha (`MapPolyline.onPress`) porque o evento do
+      `react-native-maps` só traz `id` no Google Maps do iOS — o toque é
+      despachado para a polilinha específica, não para o mapa.
+* [x] Editor é uma tela própria, `/organizer/event/[eventId]/map/[mapId]/path/[pathId]`,
+      aberta pela linha ou pelo trajeto, e salva por botão explícito ("Salvar
+      alterações") em vez de a cada tecla.
+* [x] O editor muda **só o nome** e mostra o resto como contexto — distância,
+      contagem de pontos e data — porque a geometria vem da gravação e os
+      atributos de acessibilidade são da Sprint 9.
+* [x] Caminho sem nome se anuncia pela distância ("Caminho de 111 m") em vez de
+      título vazio ou "sem nome": `pathLabels` em `src/utils/`, com teste, porque
+      é regra de apresentação com casos que quebram em silêncio.
+* [x] Excluir caminho continua por linha, com o `Dialog` destrutivo da Sprint 5.
+      O botão de apagar virou `trailingAction` do `ListRow` — fora da área tocável
+      da linha, porque botão dentro do botão da linha desaparece para o leitor de
+      tela.
+* [ ] Adicionar ponto. (Sprint 7)
+* [ ] Mover ponto. (Sprint 7)
+* [ ] Excluir ponto. (Sprint 7)
+
+> **A migração é registrada à mão** em `backend/src/database/typeorm.options.ts`.
+> Um arquivo novo em `migrations/` que não entrar no array `migrations` compila,
+> passa no typecheck e nunca roda — o `show` responde "Banco atualizado" e o
+> `run` não aplica nada, sem erro.
 
 ### Sprint 7 — Pontos de interesse
 

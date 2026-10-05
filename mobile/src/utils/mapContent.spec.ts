@@ -11,6 +11,7 @@ function makePath(overrides: Partial<Path> = {}): Path {
       [-23.5506, -46.6334],
     ],
     distance: 111.2,
+    name: null,
     createdAt: '2026-09-02T10:00:00.000Z',
     updatedAt: '2026-09-02T10:00:00.000Z',
     ...overrides,

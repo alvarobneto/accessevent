@@ -820,9 +820,17 @@ description
 address
 startDate
 endDate
+category
 organizerId
 createdAt
 ```
+
+`category` classifica o evento para o participante (a seção "Descubra por
+categoria"). É opcional e a lista de valores é fechada, para a navegação por
+categoria não fragmentar: `cultura`, `tecnologia`, `musica`, `esportes`,
+`gastronomia`, `educacao`, `negocios`, `saude`, `religiao` e `outros` — o
+`outros` garante que nenhum evento fique sem classificação. Não tem relação
+com as "categorias de ponto" do §10, que classificam `PointOfInterest`.
 
 ## Map
 
@@ -839,6 +847,7 @@ updatedAt
 ```text
 id
 mapId
+name
 startNodeId
 endNodeId
 geometry
@@ -852,10 +861,17 @@ notes
 ```
 
 As colunas chegam por etapa, na ordem em que o app passa a usá-las: `geometry` e
-`distance` com a gravação do caminho (RF05), `startNodeId` e `endNodeId` quando
-existirem os pontos que são as pontas do caminho, e os atributos de acessibilidade
-na fase de acessibilidade. Criá-las todas de uma vez faria o schema afirmar que o
-app sabe preencher o que ele ainda não tem como preencher.
+`distance` com a gravação do caminho (RF05), `name` com a edição do caminho,
+`startNodeId` e `endNodeId` quando existirem os pontos que são as pontas do
+caminho, e os atributos de acessibilidade na fase de acessibilidade. Criá-las todas
+de uma vez faria o schema afirmar que o app sabe preencher o que ele ainda não tem
+como preencher.
+
+`name` é opcional e anulável: um caminho gravado existe sem nome, e o organizador
+nomeia depois. Quem não nomeou continua reconhecendo o trajeto pela distância e
+pela data da caminhada — a ausência de nome não é estado que a interface precise
+explicar. O nome é do organizador e é o que torna dois caminhos do mesmo dia
+distinguíveis, então ele aparece na lista e é a primeira coisa que o editor mostra.
 
 ## PointOfInterest
 

@@ -58,8 +58,10 @@ export type NavigationMap = {
  *
  * `distance` **não volta na escrita**: o servidor calcula a partir da geometria e
  * devolve o valor, então o número que a tela mostra durante a gravação e o que
- * fica gravado vêm da mesma conta. `startNodeId`/`endNodeId` e os atributos de
- * acessibilidade chegam nas Sprints 7 e 9, cada um com seu campo.
+ * fica gravado vêm da mesma conta. `name` chega na Sprint 6 e é `null` enquanto o
+ * organizador não nomeou o caminho: a lista precisa distinguir "sem nome" de
+ * "nomeado" para não prometer um nome que não existe. `startNodeId`/`endNodeId` e
+ * os atributos de acessibilidade chegam nas Sprints 7 e 9, cada um com seu campo.
  */
 export type Path = {
   id: string;
@@ -67,6 +69,8 @@ export type Path = {
   geometry: MapGeometry;
   /** Distância estimada, em metros. */
   distance: number;
+  /** Nome que o organizador deu ao caminho, ou `null` se ele ainda não nomeou. */
+  name: string | null;
   createdAt: string;
   updatedAt: string;
 };

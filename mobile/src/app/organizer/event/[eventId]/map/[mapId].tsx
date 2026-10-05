@@ -1,5 +1,5 @@
 import { Stack, router, useLocalSearchParams } from 'expo-router';
-import { useMemo } from 'react';
+import { useCallback, useMemo } from 'react';
 import { View } from 'react-native';
 
 import { AsyncContent } from '@/components/async-content';
@@ -62,7 +62,28 @@ export default function ManageNavigationMapScreen() {
 
   const paths = savedPaths.state.status === 'success' ? savedPaths.state.data : NO_PATHS;
 
-  const polylines = useMemo(() => polylinesFromPaths(paths), [paths]);
+  const openPathEditor = useCallback(
+    (pathId: string) => {
+      router.push({
+        pathname: '/organizer/event/[eventId]/map/[mapId]/path/[pathId]',
+        params: { eventId, mapId: id, pathId },
+      });
+    },
+    [eventId, id],
+  );
+
+  // O trajeto é uma das duas formas de escolher um caminho — a outra é a linha da
+  // lista, que é a que tem alvo de toque grande e nome legível. O `onPress` mora
+  // em cada polilinha porque o evento do `react-native-maps` só traz o `id` no
+  // Google Maps do iOS; ver `MapPolyline`.
+  const polylines = useMemo(
+    () =>
+      polylinesFromPaths(paths).map((polyline) => ({
+        ...polyline,
+        onPress: () => openPathEditor(polyline.id),
+      })),
+    [paths, openPathEditor],
+  );
 
   return (
     <>
@@ -93,7 +114,8 @@ export default function ManageNavigationMapScreen() {
                     }
                   />
                   <Text variant="caption">
-                    O mapa é desenhado a partir dos caminhos que você percorre no local.
+                    O mapa é desenhado a partir dos caminhos que você percorre no local. Toque em um
+                    trajeto para renomeá-lo.
                   </Text>
                 </View>
 
@@ -116,7 +138,9 @@ export default function ManageNavigationMapScreen() {
                   isEmpty={(list) => list.length === 0}
                   empty={<NoPathsHint />}
                 >
-                  {(list) => <PathList paths={list} onChanged={savedPaths.reload} />}
+                  {(list) => (
+                    <PathList paths={list} onOpen={openPathEditor} onChanged={savedPaths.reload} />
+                  )}
                 </AsyncContent>
 
                 <Section

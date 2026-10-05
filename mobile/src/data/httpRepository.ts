@@ -105,6 +105,10 @@ export function createHttpRepository(): AppRepository {
       }
     },
 
+    async updatePath(pathId, changes) {
+      return api.patch<Path>(`/paths/${pathId}`, compact(changes));
+    },
+
     async deletePath(pathId) {
       await api.delete<void>(`/paths/${pathId}`);
     },

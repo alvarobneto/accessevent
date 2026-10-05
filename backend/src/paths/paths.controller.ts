@@ -6,12 +6,14 @@ import {
   HttpCode,
   HttpStatus,
   Param,
+  Patch,
   Post,
 } from '@nestjs/common';
 
 import { ParseUuidPipe } from '../common/parse-uuid-pipe.js';
 
 import { CreatePathDto } from './dto/create-path.dto.js';
+import { UpdatePathDto } from './dto/update-path.dto.js';
 import type { PathResponse } from './path.response.js';
 import { PathsService } from './paths.service.js';
 
@@ -42,7 +44,7 @@ export class MapPathsController {
   }
 }
 
-/** Caminho avulso: buscar pelo id e apagar. Renomear e editar chegam na Sprint 6. */
+/** Caminho avulso: buscar pelo id, renomear e apagar. */
 @Controller('paths')
 export class PathsController {
   constructor(private readonly paths: PathsService) {}
@@ -52,6 +54,15 @@ export class PathsController {
     @Param('pathId', ParseUuidPipe()) pathId: string,
   ): Promise<PathResponse> {
     return this.paths.findOne(pathId);
+  }
+
+  /** Renomear o caminho, o que a Sprint 6 acrescenta ao editor do organizador. */
+  @Patch(':pathId')
+  async update(
+    @Param('pathId', ParseUuidPipe()) pathId: string,
+    @Body() dto: UpdatePathDto,
+  ): Promise<PathResponse> {
+    return this.paths.update(pathId, dto);
   }
 
   @Delete(':pathId')
