@@ -2,8 +2,10 @@ import { useState } from 'react';
 import { router } from 'expo-router';
 import { View } from 'react-native';
 
-import { Alert, Button, Card, DateField, Icon, Input } from '@/components/ui';
+import { Alert, Button, Card, DateField, Icon, Input, Text } from '@/components/ui';
+import type { EventCategory } from '@/data/types';
 import { colors } from '@/theme/tokens';
+import { EVENT_CATEGORY_OPTIONS } from '@/utils/event-categories';
 import { toErrorMessage } from '@/utils/errors';
 
 const NAME_MAX_LENGTH = 120;
@@ -17,6 +19,8 @@ export type EventFormValues = {
   address: string;
   startDate: string;
   endDate: string;
+  /** Chave da categoria ou `''` para "sem categoria". */
+  category: EventCategory | '';
 };
 
 /** Valores prontos para o `AppRepository`: datas em `YYYY-MM-DD` ou `null`. */
@@ -26,6 +30,7 @@ export type EventFormSubmission = {
   address: string | null;
   startDate: string | null;
   endDate: string | null;
+  category: EventCategory | null;
 };
 
 type EventFormProps = {
@@ -43,6 +48,7 @@ const EMPTY_VALUES: EventFormValues = {
   address: '',
   startDate: '',
   endDate: '',
+  category: '',
 };
 
 /**
@@ -113,6 +119,7 @@ export function EventForm({
         address: values.address.trim() || null,
         startDate: values.startDate || null,
         endDate: values.endDate || null,
+        category: values.category || null,
       });
     } catch (error) {
       setSubmitError(toErrorMessage(error, 'Não foi possível salvar o evento.'));
@@ -164,6 +171,35 @@ export function EventForm({
         />
       </Card>
 
+      {/* Categoria: classificação que alimenta o "descubra por categoria". */}
+      <Card>
+        <Text variant="subheading">Categoria</Text>
+        <Text variant="caption">Opcional. Ajuda o participante a encontrar o evento.</Text>
+
+        <View className="flex-row flex-wrap gap-2">
+          {EVENT_CATEGORY_OPTIONS.map((option) => {
+            const selected = values.category === option.key;
+            return (
+              <View key={option.key} className="w-[48%] grow">
+                <Button
+                  label={option.label}
+                  variant={selected ? 'solid' : 'outline'}
+                  size="sm"
+                  onPress={() => setField('category', selected ? '' : option.key)}
+                  accessibilityState={{ selected }}
+                  accessibilityHint={
+                    selected
+                      ? 'Categoria selecionada; toque para remover'
+                      : 'Seleciona esta categoria'
+                  }
+                  testID={`event-category-${option.key}`}
+                />
+              </View>
+            );
+          })}
+        </View>
+      </Card>
+
       <Card>
         <DateField
           label="Data inicial"
@@ -207,6 +243,7 @@ export function toEventFormValues(event: {
   address: string | null;
   startDate: string | null;
   endDate: string | null;
+  category: EventCategory | null;
 }): EventFormValues {
   return {
     name: event.name,
@@ -214,5 +251,6 @@ export function toEventFormValues(event: {
     address: event.address ?? '',
     startDate: event.startDate ?? '',
     endDate: event.endDate ?? '',
+    category: event.category ?? '',
   };
 }
