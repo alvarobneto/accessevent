@@ -8,13 +8,17 @@ import {
   Param,
   Patch,
   Post,
+  Query,
 } from '@nestjs/common';
 
 import { ParseUuidPipe } from '../common/parse-uuid-pipe.js';
 
 import { CreateEventDto } from './dto/create-event.dto.js';
 import { UpdateEventDto } from './dto/update-event.dto.js';
-import type { EventResponse } from './event.response.js';
+import type {
+  EventCategoryCount,
+  EventResponse,
+} from './event.response.js';
 import { EventsService } from './events.service.js';
 
 @Controller('events')
@@ -22,8 +26,17 @@ export class EventsController {
   constructor(private readonly events: EventsService) {}
 
   @Get()
-  async list(): Promise<EventResponse[]> {
-    return this.events.findAll();
+  async list(@Query('category') category?: string): Promise<EventResponse[]> {
+    return this.events.findAll(category);
+  }
+
+  /**
+   * Categorias com eventos cadastrados. Precisa vir antes de `:eventId` para
+   * não ser capturada pelo pipe de UUID.
+   */
+  @Get('categories')
+  async categories(): Promise<EventCategoryCount[]> {
+    return this.events.countByCategory();
   }
 
   @Get(':eventId')

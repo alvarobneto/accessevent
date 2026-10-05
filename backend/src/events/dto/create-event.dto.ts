@@ -1,6 +1,13 @@
-import { IsOptional, IsString, Matches, MaxLength } from 'class-validator';
+import {
+  IsIn,
+  IsOptional,
+  IsString,
+  Matches,
+  MaxLength,
+} from 'class-validator';
 
 import { IsPresentName } from '../../common/is-present-name.js';
+import { EVENT_CATEGORIES, type EventCategory } from '../event-category.js';
 
 /** Datas de evento são apenas dia, mês e ano, no formato `2026-10-05`. */
 export const DATE_ONLY_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
@@ -40,4 +47,11 @@ export class CreateEventDto {
   @IsOptional()
   @Matches(DATE_ONLY_PATTERN, { message: DATE_ONLY_MESSAGE })
   endDate?: string | null;
+
+  /** Opcional; `null` limpa. Deve ser uma das chaves de `EVENT_CATEGORIES`. */
+  @IsOptional()
+  @IsIn(EVENT_CATEGORIES, {
+    message: 'Informe uma categoria válida para o evento.',
+  })
+  category?: EventCategory | null;
 }

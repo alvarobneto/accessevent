@@ -13,6 +13,7 @@ type EventRow = {
   address: string | null;
   startDate: string | null;
   endDate: string | null;
+  category: 'tecnologia' | 'cultura' | null;
   createdAt: Date;
   updatedAt: Date;
 };
@@ -25,6 +26,7 @@ function makeRow(overrides: Partial<EventRow> = {}): EventRow {
     address: null,
     startDate: null,
     endDate: null,
+    category: null,
     createdAt: new Date('2026-09-01T10:00:00.000Z'),
     updatedAt: new Date('2026-09-01T10:00:00.000Z'),
     ...overrides,
@@ -73,8 +75,36 @@ describe('EventsService (unit)', () => {
 
     const result = await service.findAll();
 
-    expect(find).toHaveBeenCalledWith({ order: { name: 'ASC' } });
+    expect(find).toHaveBeenCalledWith({ where: {}, order: { name: 'ASC' } });
     expect(result.map((event) => event.id)).toEqual(['b', 'a']);
+  });
+
+  it('filters by category when one is sent', async () => {
+    find.mockResolvedValue([makeRow({ category: 'tecnologia' })]);
+
+    const result = await service.findAll('tecnologia');
+
+    expect(find).toHaveBeenCalledWith({
+      where: { category: 'tecnologia' },
+      order: { name: 'ASC' },
+    });
+    expect(result).toHaveLength(1);
+  });
+
+  it('lists only categories that have events, with the count', async () => {
+    find.mockResolvedValue([
+      makeRow({ category: 'tecnologia' }),
+      makeRow({ category: 'tecnologia' }),
+      makeRow({ category: 'cultura' }),
+      makeRow({ category: null }),
+    ]);
+
+    const result = await service.countByCategory();
+
+    expect(result).toEqual([
+      { category: 'tecnologia', eventsCount: 2 },
+      { category: 'cultura', eventsCount: 1 },
+    ]);
   });
 
   it('exposes dates as YYYY-MM-DD and timestamps as ISO strings', async () => {
@@ -91,6 +121,7 @@ describe('EventsService (unit)', () => {
       address: null,
       startDate: '2026-10-05',
       endDate: '2026-10-08',
+      category: null,
       createdAt: '2026-09-01T10:00:00.000Z',
       updatedAt: '2026-09-01T10:00:00.000Z',
     });
@@ -117,6 +148,7 @@ describe('EventsService (unit)', () => {
       address: null,
       startDate: null,
       endDate: null,
+      category: null,
     });
   });
 

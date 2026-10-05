@@ -8,8 +8,13 @@ import { Repository } from 'typeorm';
 
 import type { CreateEventDto } from './dto/create-event.dto.js';
 import type { UpdateEventDto } from './dto/update-event.dto.js';
+import type { EventCategory } from './event-category.js';
 import { EventEntity } from './event.entity.js';
-import { toEventResponse, type EventResponse } from './event.response.js';
+import {
+  toEventResponse,
+  type EventCategoryCount,
+  type EventResponse,
+} from './event.response.js';
 
 /** Campos opcionais aceitam `''` (limpar) ou `null`; gravamos sempre `NULL`. */
 function normalizeOptionalText(
@@ -26,9 +31,33 @@ export class EventsService {
     private readonly events: Repository<EventEntity>,
   ) {}
 
-  async findAll(): Promise<EventResponse[]> {
-    const events = await this.events.find({ order: { name: 'ASC' } });
+  async findAll(category?: string): Promise<EventResponse[]> {
+    const where =
+      category !== undefined ? { category: category as EventCategory } : {};
+    const events = await this.events.find({ where, order: { name: 'ASC' } });
     return events.map(toEventResponse);
+  }
+
+  /**
+   * Categorias que têm ao menos um evento, com a contagem. Usadas pela tela
+   * "descubra por categoria": uma categoria sem evento não aparece.
+   */
+  async countByCategory(): Promise<EventCategoryCount[]> {
+    const rows = await this.events.find({
+      select: { category: true },
+      order: { category: 'ASC' },
+    });
+
+    const counts = new Map<EventCategory, number>();
+    for (const row of rows) {
+      if (row.category) {
+        counts.set(row.category, (counts.get(row.category) ?? 0) + 1);
+      }
+    }
+
+    return [...counts.entries()]
+      .map(([category, eventsCount]) => ({ category, eventsCount }))
+      .sort((a, b) => b.eventsCount - a.eventsCount);
   }
 
   async findOne(id: string): Promise<EventResponse> {
@@ -44,6 +73,7 @@ export class EventsService {
       address: normalizeOptionalText(dto.address),
       startDate: dto.startDate ?? null,
       endDate: dto.endDate ?? null,
+      category: dto.category ?? null,
     });
 
     return toEventResponse(await this.events.save(event));
@@ -68,6 +98,7 @@ export class EventsService {
     }
     if (dto.startDate !== undefined) event.startDate = dto.startDate;
     if (dto.endDate !== undefined) event.endDate = dto.endDate;
+    if (dto.category !== undefined) event.category = dto.category;
 
     return toEventResponse(await this.events.save(event));
   }
