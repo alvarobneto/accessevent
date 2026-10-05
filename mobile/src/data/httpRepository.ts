@@ -7,7 +7,7 @@ import type {
   NewNavigationMap,
   NewPath,
 } from './repository';
-import type { Event, NavigationMap, Path } from './types';
+import type { Event, EventCategoryCount, NavigationMap, Path } from './types';
 
 /**
  * `AppRepository` sobre a API do backend (Sprint 2).
@@ -31,8 +31,13 @@ function compact<T extends object>(input: T): Partial<T> {
 
 export function createHttpRepository(): AppRepository {
   return {
-    async listEvents() {
-      return api.get<Event[]>('/events');
+    async listEvents(category) {
+      const query = category ? `?category=${encodeURIComponent(category)}` : '';
+      return api.get<Event[]>(`/events${query}`);
+    },
+
+    async listEventCategories() {
+      return api.get<EventCategoryCount[]>('/events/categories');
     },
 
     async createEvent(input: NewEvent) {

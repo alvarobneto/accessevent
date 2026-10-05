@@ -1,6 +1,6 @@
 import type { MapGeometry } from '@/types/map';
 
-import type { Event, NavigationMap, Path } from './types';
+import type { Event, EventCategory, EventCategoryCount, NavigationMap, Path } from './types';
 
 export type NewEvent = {
   name: string;
@@ -9,6 +9,8 @@ export type NewEvent = {
   /** `YYYY-MM-DD` ou `null`. */
   startDate?: string | null;
   endDate?: string | null;
+  /** Categoria do evento, ou `null` para remover. */
+  category?: EventCategory | null;
 };
 
 /** Campos que o `PATCH /events/:id` aceita; todos são opcionais. */
@@ -37,7 +39,9 @@ export type NewPath = {
  * repositório em memória não exige mudá-las.
  */
 export interface AppRepository {
-  listEvents(): Promise<Event[]>;
+  listEvents(category?: EventCategory): Promise<Event[]>;
+  /** Categorias que têm ao menos um evento, com a contagem de cada uma. */
+  listEventCategories(): Promise<EventCategoryCount[]>;
   createEvent(input: NewEvent): Promise<Event>;
   getEvent(eventId: string): Promise<Event | null>;
   updateEvent(eventId: string, changes: EventChanges): Promise<Event>;

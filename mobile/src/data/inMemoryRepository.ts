@@ -7,7 +7,7 @@ import type {
   NewNavigationMap,
   NewPath,
 } from './repository';
-import type { Event, NavigationMap, Path } from './types';
+import type { Event, EventCategoryCount, NavigationMap, Path } from './types';
 
 /**
  * Implementação em memória do `AppRepository`.
@@ -32,11 +32,27 @@ export function createInMemoryRepository(): AppRepository {
   };
 
   return {
-    async listEvents() {
-      return [...events].sort((a, b) => a.name.localeCompare(b.name, 'pt-BR'));
+    async listEvents(category) {
+      const filtered = category ? events.filter((event) => event.category === category) : events;
+      return [...filtered].sort((a, b) => a.name.localeCompare(b.name, 'pt-BR'));
     },
 
-    async createEvent({ name, description, address, startDate, endDate }: NewEvent) {
+    async listEventCategories(): Promise<EventCategoryCount[]> {
+      const counts = new Map<string, number>();
+      for (const event of events) {
+        if (event.category) {
+          counts.set(event.category, (counts.get(event.category) ?? 0) + 1);
+        }
+      }
+      return [...counts.entries()]
+        .map(([category, eventsCount]) => ({
+          category: category as EventCategoryCount['category'],
+          eventsCount,
+        }))
+        .sort((a, b) => b.eventsCount - a.eventsCount);
+    },
+
+    async createEvent({ name, description, address, startDate, endDate, category }: NewEvent) {
       const timestamp = now();
       const event: Event = {
         id: nextId('evento'),
@@ -45,6 +61,7 @@ export function createInMemoryRepository(): AppRepository {
         address: clean(address),
         startDate: startDate ?? null,
         endDate: endDate ?? null,
+        category: category ?? null,
         createdAt: timestamp,
         updatedAt: timestamp,
       };
@@ -70,6 +87,7 @@ export function createInMemoryRepository(): AppRepository {
       if (changes.address !== undefined) event.address = clean(changes.address);
       if (changes.startDate !== undefined) event.startDate = changes.startDate;
       if (changes.endDate !== undefined) event.endDate = changes.endDate;
+      if (changes.category !== undefined) event.category = changes.category;
 
       event.updatedAt = now();
       return event;

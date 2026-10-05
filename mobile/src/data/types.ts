@@ -7,6 +7,29 @@ import type { MapGeometry } from '@/types/map';
  * Os campos opcionais são `null` (e não string vazia) porque é o que a API
  * devolve; a API normaliza string vazia em `NULL` ao gravar.
  */
+/**
+ * Categoria do evento. As chaves são as mesmas validadas pela API
+ * (`EVENT_CATEGORIES` no backend); os rótulos pt-BR ficam em
+ * `src/utils/event-categories.ts`.
+ */
+export type EventCategory =
+  | 'cultura'
+  | 'tecnologia'
+  | 'musica'
+  | 'esportes'
+  | 'gastronomia'
+  | 'educacao'
+  | 'negocios'
+  | 'saude'
+  | 'religiao'
+  | 'outros';
+
+/** Categoria com a quantidade de eventos cadastrados nela. */
+export type EventCategoryCount = {
+  category: EventCategory;
+  eventsCount: number;
+};
+
 export type Event = {
   id: string;
   name: string;
@@ -15,6 +38,7 @@ export type Event = {
   /** `YYYY-MM-DD`, ou `null` quando o evento não tem data. */
   startDate: string | null;
   endDate: string | null;
+  category: EventCategory | null;
   createdAt: string;
   updatedAt: string;
 };
