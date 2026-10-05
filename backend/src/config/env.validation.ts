@@ -78,6 +78,10 @@ class EnvironmentVariables {
   @MinLength(1)
   @IsOptional()
   CORS_ORIGINS = '*';
+
+  @IsString()
+  @IsOptional()
+  JWT_SECRET = 'accessevent-secret-key';
 }
 
 function toBoolean(value: string, variableName: string): boolean {
