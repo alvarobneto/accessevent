@@ -26,6 +26,15 @@ export const dataSource = process.env.EXPO_PUBLIC_DATA_SOURCE || 'api';
 export const useInMemoryData = dataSource === 'memory';
 
 /**
+ * Modo de autenticação: `dev` aceita qualquer par e-mail/senha válido, para
+ * facilitar o desenvolvimento enquanto o backend não tem endpoint de login;
+ * qualquer outro valor exige autenticação real.
+ */
+export const authMode = process.env.EXPO_PUBLIC_AUTH_MODE || 'dev';
+
+export const isDevAuth = authMode === 'dev';
+
+/**
  * Chave da API do Google Maps SDK for Android, ou string vazia.
  *
  * Ela entra no `.env` em vez de ficar só no `app.json` porque o mesmo valor
