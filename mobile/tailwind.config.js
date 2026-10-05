@@ -116,14 +116,14 @@ module.exports = {
       },
 
       /**
-       * Inter. Cada peso é uma família registrada pelo `expo-font`, então
-       * `font-medium` resolve para `Inter_500Medium` *e* para `font-weight: 500`.
+       * Nunito. Cada peso é uma família registrada pelo `expo-font`, então
+       * `font-medium` resolve para `Nunito_500Medium` *e* para `font-weight: 500`.
        */
       fontFamily: {
-        regular: ['Inter_400Regular'],
-        medium: ['Inter_500Medium'],
-        semibold: ['Inter_600SemiBold'],
-        bold: ['Inter_700Bold'],
+        regular: ['Nunito_400Regular'],
+        medium: ['Nunito_500Medium'],
+        semibold: ['Nunito_600SemiBold'],
+        bold: ['Nunito_700Bold'],
       },
       fontWeight: {
         regular: '400',
@@ -139,10 +139,10 @@ module.exports = {
         xl: '24px',
       },
 
-      /** Sombras discretas: duas, e só duas. Nada de sombra grande ou escura. */
+      /** Sombras difusas e leves — estilo delicado e suave. */
       boxShadow: {
-        sm: '0 1px 2px rgba(15, 23, 42, 0.04), 0 4px 12px rgba(15, 23, 42, 0.05)',
-        md: '0 2px 6px rgba(15, 23, 42, 0.06), 0 12px 24px rgba(15, 23, 42, 0.10)',
+        sm: '0 2px 8px rgba(28, 25, 23, 0.04), 0 8px 24px rgba(28, 25, 23, 0.06)',
+        md: '0 4px 12px rgba(28, 25, 23, 0.05), 0 16px 32px rgba(28, 25, 23, 0.08)',
       },
 
       /** Larguras de conteúdo, para substituir valores arbitrários nos textos. */

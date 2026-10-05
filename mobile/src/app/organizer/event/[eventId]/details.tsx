@@ -55,7 +55,7 @@ export default function EventDetailsScreen() {
                   confirmLoadingLabel="Apagando o evento…"
                   errorFallback="Não foi possível apagar o evento."
                   onDelete={() => repository.deleteEvent(id)}
-                  onDeleted={() => router.dismissTo('/organizer')}
+                  onDeleted={() => router.replace('/user')}
                   testID="delete-event-action"
                 />
               </>
@@ -65,11 +65,7 @@ export default function EventDetailsScreen() {
                 title="Evento não encontrado"
                 description="Ele pode ter sido removido desde que esta tela foi aberta."
               >
-                <Button
-                  label="Voltar"
-                  variant="outline"
-                  onPress={() => router.replace('/organizer')}
-                />
+                <Button label="Voltar" variant="outline" onPress={() => router.replace('/user')} />
               </EmptyState>
             )
           }

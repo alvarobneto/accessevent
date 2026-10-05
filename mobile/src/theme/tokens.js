@@ -6,7 +6,7 @@
  * Este arquivo é a fonte de verdade, e o `tailwind.config.js` importa dele em vez
  * de repetir os valores. Ele existe porque parte da interface não aceita
  * `className`: a cor de `ActivityIndicator`, `selectionColor` do `TextInput`, a
- * cor de `MaterialCommunityIcons` e o `screenOptions` do Expo Router pedem uma
+ * cor de `LucideIcon` e o `screenOptions` do Expo Router pedem uma
  * cor literal. Sem este módulo, essas poucas APIs obrigariam a espalhar hex pelo
  * app — exatamente o que o `design.md` proíbe.
  *
@@ -17,53 +17,49 @@
 /** Paleta do `design.md`: escala primária, escala neutra e cores semânticas. */
 const colors = {
   /** Azul da marca. `primary` é o tom base. */
-  primary50: '#EFF6FF',
-  primary100: '#DBEAFE',
-  primary200: '#BFDBFE',
-  primary300: '#93C5FD',
-  primary400: '#60A5FA',
-  primary500: '#3B82F6',
-  primary600: '#2563EB',
-  primary700: '#1D4ED8',
-  primary800: '#1E40AF',
-  primary900: '#1E3A8A',
+  primary50: '#F0F5FF',
+  primary100: '#E0EAFF',
+  primary200: '#C7D7FE',
+  primary300: '#A5B8FC',
+  primary400: '#818CF8',
+  primary500: '#6366F1',
+  primary600: '#4F46E5',
+  primary700: '#4338CA',
+  primary800: '#3730A3',
+  primary900: '#312E81',
 
-  /** Neutros frios: fundo, superfície, bordas e texto. */
-  gray50: '#F8FAFC',
-  gray100: '#F1F5F9',
-  gray200: '#E2E8F0',
-  gray300: '#CBD5E1',
-  gray400: '#94A3B8',
-  gray500: '#64748B',
-  gray600: '#475569',
-  gray700: '#334155',
-  gray800: '#1E293B',
-  gray900: '#0F172A',
+  /** Neutros quentes: fundo, superfície, bordas e texto. */
+  gray50: '#FAFAF9',
+  gray100: '#F5F5F4',
+  gray200: '#E7E5E4',
+  gray300: '#D6D3D1',
+  gray400: '#A8A29E',
+  gray500: '#78716C',
+  gray600: '#57534E',
+  gray700: '#44403C',
+  gray800: '#292524',
+  gray900: '#1C1917',
 
   /**
    * Estados. Os tons do `design.md` preenchem fundo, borda e ícone; os tons
    * `*Strong` são o que se usa quando a cor vira texto.
-   *
-   * `success`, `warning` e `info` ficam entre 3,30:1 e 2,15:1 sobre branco e
-   * reprovariam em WCAG AA como texto, então nunca são usados para texto — os
-   * `*Strong` fecham em 7,13:1, 7,09:1 e 5,93:1.
    */
-  success: '#16A34A',
+  success: '#4ADE80',
   successStrong: '#166534',
-  warning: '#F59E0B',
+  warning: '#FBBF24',
   warningStrong: '#92400E',
-  error: '#DC2626',
+  error: '#F87171',
   errorStrong: '#B91C1C',
-  info: '#0284C7',
+  info: '#38BDF8',
   infoStrong: '#0369A1',
 
   /** Papel do tema, com o nome que o `design.md` dá. */
   background: '#FFFFFF',
-  surface: '#F8FAFC',
-  primary: '#2563EB',
-  content: '#0F172A',
-  muted: '#475569',
-  border: '#E2E8F0',
+  surface: '#FAFAF9',
+  primary: '#6366F1',
+  content: '#1C1917',
+  muted: '#57534E',
+  border: '#E7E5E4',
 
   white: '#FFFFFF',
   transparent: 'transparent',
@@ -86,12 +82,12 @@ const spacing = {
 /** `paddingHorizontal` padrão de todas as telas. */
 const screenPadding = 20;
 
-/** Raios do `design.md`. */
+/** Raios do `design.md` — cantos amplos e suaves. */
 const radius = {
-  sm: 8,
-  md: 12,
-  lg: 16,
-  xl: 24,
+  sm: 12,
+  md: 16,
+  lg: 20,
+  xl: 28,
   full: 999,
 };
 
@@ -152,25 +148,19 @@ const headerTheme = {
   headerTintColor: colors.primary,
   headerTitleStyle: {
     color: colors.content,
-    fontFamily: 'Inter_600SemiBold',
+    fontFamily: 'Nunito_600SemiBold',
     fontSize: 18,
     fontWeight: '600',
   },
   headerLargeTitleStyle: {
     color: colors.content,
-    fontFamily: 'Inter_700Bold',
+    fontFamily: 'Nunito_700Bold',
     fontSize: 32,
     fontWeight: '700',
   },
   headerShadowVisible: false,
   headerLargeTitleShadowVisible: false,
   headerBlurEffect: 'systemChromeMaterial',
-  // O `react-native-screens` liga o efeito de borda de rolagem por padrão
-  // (`automatic`) e avisa quando ele vem junto com um `blurEffect`, porque em iOS 26
-  // os dois se sobrepõem. O blur do header é escolha nossa e vale em toda versão do
-  // iOS, então o efeito automático é desligado nas quatro bordas: o contrário
-  // deixaria o header com aparência diferente conforme a versão do sistema, e o
-  // `design.md` não pede isso.
   scrollEdgeEffects: {
     top: 'hidden',
     bottom: 'hidden',
