@@ -21,7 +21,10 @@ export class AddEventCategory1730000002000 implements MigrationInterface {
 
     await queryRunner.createIndex(
       'events',
-      new TableIndex({ name: 'events_category_idx', columnNames: ['category'] }),
+      new TableIndex({
+        name: 'events_category_idx',
+        columnNames: ['category'],
+      }),
     );
   }
 

@@ -53,7 +53,9 @@ export class UsersController {
     const email = body.email.trim().toLowerCase();
     const existing = await this.usersService.findByEmail(email);
     if (existing) {
-      throw new ConflictException('Já existe uma conta cadastrada com este e-mail.');
+      throw new ConflictException(
+        'Já existe uma conta cadastrada com este e-mail.',
+      );
     }
 
     return this.usersService.create(

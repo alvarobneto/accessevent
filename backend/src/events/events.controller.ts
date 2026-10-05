@@ -15,10 +15,7 @@ import { ParseUuidPipe } from '../common/parse-uuid-pipe.js';
 
 import { CreateEventDto } from './dto/create-event.dto.js';
 import { UpdateEventDto } from './dto/update-event.dto.js';
-import type {
-  EventCategoryCount,
-  EventResponse,
-} from './event.response.js';
+import type { EventCategoryCount, EventResponse } from './event.response.js';
 import { EventsService } from './events.service.js';
 
 @Controller('events')

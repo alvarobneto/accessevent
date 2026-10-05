@@ -10,10 +10,10 @@ import { AuthGuard } from './auth.guard.js';
     JwtModule.register({
       global: true,
       secret: process.env.JWT_SECRET || 'accessevent-secret-key',
-      signOptions: { expiresIn: '1h' }
-    })
+      signOptions: { expiresIn: '1h' },
+    }),
   ],
   providers: [AuthService, AuthGuard],
-  exports: [AuthService, AuthGuard]
+  exports: [AuthService, AuthGuard],
 })
 export class AuthModule {}

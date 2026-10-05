@@ -36,7 +36,9 @@ export class UsersService {
       return userWithoutPassword;
     } catch (error: any) {
       if (error?.code === '23505') {
-        throw new ConflictException('Já existe uma conta cadastrada com este e-mail.');
+        throw new ConflictException(
+          'Já existe uma conta cadastrada com este e-mail.',
+        );
       }
       throw error;
     }

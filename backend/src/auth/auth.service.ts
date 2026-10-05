@@ -8,7 +8,7 @@ import { JwtService } from '@nestjs/jwt';
 export class AuthService {
   constructor(
     private readonly usersService: UsersService,
-    private readonly jwtService: JwtService
+    private readonly jwtService: JwtService,
   ) {}
 
   async signup(
@@ -18,10 +18,19 @@ export class AuthService {
     birthDate: string,
     password: string,
   ): Promise<Omit<UserEntity, 'password'>> {
-    return this.usersService.create(email, firstName, lastName, birthDate, password);
+    return this.usersService.create(
+      email,
+      firstName,
+      lastName,
+      birthDate,
+      password,
+    );
   }
 
-  async login(email: string, password: string): Promise<{ accessToken: string }> {
+  async login(
+    email: string,
+    password: string,
+  ): Promise<{ accessToken: string }> {
     const user = await this.usersService.findByEmail(email);
     if (!user) {
       throw new UnauthorizedException('E-mail ou senha inválidos.');

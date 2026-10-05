@@ -55,7 +55,11 @@ export class CreateUsers1730000003000 implements MigrationInterface {
           },
         ],
         indices: [
-          new TableIndex({ name: 'users_email_idx', columnNames: ['email'], isUnique: true }),
+          new TableIndex({
+            name: 'users_email_idx',
+            columnNames: ['email'],
+            isUnique: true,
+          }),
         ],
       }),
       true,
