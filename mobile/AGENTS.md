@@ -798,13 +798,15 @@ do ponto ficam para a Sprint 10. O que a Sprint 7 entrega é o cadastro.
   move um ponto, e chega por `onMapPress` do `EventMap`, que devolve a coordenada
   já no formato gravado (`Coordinate`), não o `LatLng` do `react-native-maps`.
 
-### Editor protótipo de áreas (a tela de "Mapear novo ponto")
+### Canvas experimental de áreas (base para a Sprint 8)
 
-A tela `poi/new.tsx` virou um **protótipo em memória**, a caminho do fluxo de
-mapeamento: o organizador desenha os cômodos e coloca **um item por área**. Nada é
-gravado — o "Salvar" abre um diálogo de sucesso e a Sprint 9 liga o estado do
-`poiEditorReducer` (testado em `src/utils/`) à `PointOfInterest` de verdade. Três
-decisões de equipe divergem do rascunho original e ficam registradas aqui:
+`/poi/new` é o fluxo persistido da Sprint 7: usa `PoiForm` para criar um ponto,
+escolher sua posição no mapa e chamar `repository.createPoi`. O `MapCanvas` e o
+`poiEditorReducer` continuam como uma base experimental, fora do fluxo de criação
+de POI: desenham áreas e associam um item por área em memória, sem persistir. Essa
+base não conclui a Sprint 8, que ainda precisa do modelo e da API de `Area` e de
+um fluxo próprio de salvar/reabrir. As decisões técnicas do canvas ficam registradas
+abaixo para quando a sprint de áreas for retomada:
 
 - **O desenho é SVG (`react-native-svg`), não o `EventMap`.** O editor precisa de
   conversão ponto↔coordenada bidirecional para desenhar retângulo/livre, mover área e
@@ -820,11 +822,12 @@ decisões de equipe divergem do rascunho original e ficam registradas aqui:
   lados, com piso de 20px. Depois de concluir uma forma, o modo de desenho desarma;
   tocar fora do canvas também o desarma. Dois dedos continuam reservados para pan e
   zoom mesmo com uma ferramenta selecionada.
-- **A paleta de pontos é só toque (sem arraste).** Selecionar um tipo na faixa do mapa
-  e tocar no canvas coloca o ponto — a terceira porta (arrastar o ícone da paleta) do
-  PoiForm fica para o formulário real da Sprint 9. Tocar de novo no mesmo tipo desarma
-  (`arm-poi` é toggle), e item e ferramenta de desenho não coexistem. Depois de
-  colocado, o marcador pode ser arrastado diretamente, mesmo sem selecioná-lo antes.
+- **A paleta do canvas experimental é só toque (sem arraste).** Selecionar um tipo na
+  faixa do mapa e tocar no canvas coloca o ponto. O fluxo real da Sprint 7 usa o
+  `PoiForm`, que também permite arrastar um ícone da paleta até o mapa. Neste canvas,
+  tocar de novo no mesmo tipo desarma (`arm-poi` é toggle), e item e ferramenta de
+  desenho não coexistem. Depois de colocado, o marcador pode ser arrastado diretamente,
+  mesmo sem selecioná-lo antes.
 - **Editar um vértice move só aquele vértice.** A geometria mantém a mesma ordem,
   quantidade e identidade de pontos; nem o ajuste de caminho nem o editor de áreas
   deforma vizinhos. Redimensionar uma área também não reposiciona automaticamente o
@@ -842,8 +845,8 @@ decisões de equipe divergem do rascunho original e ficam registradas aqui:
   (`gray300`/`gray100`) sumia na fotografia do OSM e o usuário via o mapa "sem a
   trilha" — o que já está mapeado precisa continuar legível sobre qualquer tile. Os
   pinos dos pontos existentes (`PoiMarker` não-selecionado) completam o contexto. É
-  o que faz desenhar sobre um local mapeado significar algo: sem isso a tela nova
-  abria um canvas em branco ("o mapa não aparece"). O contexto também **entra no
+  o que faz desenhar sobre um local mapeado significar algo: sem isso o canvas
+  experimental abriria em branco ("o mapa não aparece"). O contexto também **entra no
   enquadramento**: a câmera cabe na primeira coisa que chega (contexto ou primeiro
   cômodo) via o mesmo `fitToAreas` do botão Centralizar, e depois nunca mais muda de
   cabeça — recarregar o contexto no foco não tira o zoom de quem está desenhando.

@@ -418,7 +418,7 @@ mover e excluir ponto são da Sprint 7, junto com os pontos de interesse.
       O botão de apagar virou `trailingAction` do `ListRow` — fora da área tocável
       da linha, porque botão dentro do botão da linha desaparece para o leitor de
       tela.
-* [ ] Adicionar ponto persistido. (Sprint 7; falta ligar o fluxo de criação ao repositório)
+* [x] Adicionar ponto persistido. (Sprint 7; fluxo de criação ligado ao repositório)
 * [x] Mover ponto. (Sprint 7)
 * [x] Excluir ponto. (Sprint 7)
 
@@ -448,11 +448,10 @@ Outro
 ```
 
 * [x] Criar `PointOfInterest`.
-* [ ] Adicionar ponto pela tela de criação e persistir na navegação. O `POST /maps/:mapId/pois`
-      existe, mas `/poi/new` ainda termina num diálogo de protótipo e não chama
-      `repository.createPoi`.
-* [ ] Posicionar e persistir o ponto novo. A interação de toque/arraste existe no protótipo em
-      memória; falta ligá-la ao fluxo de criação real.
+* [x] Adicionar ponto pela tela de criação e persistir na navegação usando
+      `repository.createPoi` e `POST /maps/:mapId/pois`.
+* [x] Posicionar e persistir o ponto novo. O formulário compartilhado usa toque ou arraste no
+      mapa para definir o retângulo e a âncora enviados à API.
 * [x] Mover ponto.
 * [x] Editar ponto.
 * [x] Remover ponto.
@@ -480,23 +479,23 @@ enquadramento: o enquadramento é o zoom, e o tamanho da marcação é o retâng
 Redimensionar a janela só mudava o zoom inicial, com dois controles para a mesma
 coisa.
 
-**Estado real da Sprint 7:** entidade, migração, endpoints e edição/remoção de POIs estão feitos;
-mas a criação do POI pela interface ainda não grava. O `/poi/new` é um protótipo local de área/POI.
-A integração do `poiEditorReducer` com `PointOfInterest` está anotada para a Sprint 9 no
-`mobile/AGENTS.md`; até ela entrar, a criação persistida continua sendo uma pendência/carry-over e
-a Sprint 7 não está fechada de ponta a ponta.
+**Estado real da Sprint 7:** entidade, migração, endpoints e CRUD pela interface estão integrados.
+`/poi/new` usa o mesmo `PoiForm` da edição, carrega os caminhos e pontos existentes como contexto,
+permite escolher a posição pelo mapa e salva com `repository.createPoi`. Ao voltar, o hub recarrega
+e desenha o novo ponto. O `MapCanvas`/`poiEditorReducer` experimental de áreas permanece fora desse
+fluxo; áreas com persistência pertencem à Sprint 8.
 
 ### Sprint 8 — Áreas
 
-**Protótipo já implementado, mas não conta como conclusão desta sprint:** a tela `poi/new` usa
-`MapCanvas` com fundo OSM, desenha retângulos e formas livres, fecha o anel ao terminar o gesto,
-permite mover/editar vértices, pan/zoom, desfazer e colocar um tipo de ponto dentro de cada área.
-Tudo vive no estado local do `poiEditorReducer`; “Salvar” só abre um diálogo e nada sobrevive ao
-sair da tela.
+**Base experimental já implementada, mas não conta como conclusão desta sprint:** os componentes
+`MapCanvas`/`poiEditorReducer` desenham retângulos e formas livres, fecham o anel ao terminar o
+gesto, permitem mover/editar vértices, pan/zoom, desfazer e colocar um tipo de ponto dentro de cada
+área. Tudo vive em estado local. O fluxo `/poi/new` agora é o CRUD persistido da Sprint 7; a base
+experimental de áreas não está ligada a essa tela e ainda precisa de persistência própria.
 
 Ainda faltam persistência de `Area` (entidade/API/migração), salvar e recarregar, controle de remoção
-de área na interface e campos de nome/tipo de área. O CRUD de `PointOfInterest` ainda não está
-ligado a esse protótipo.
+de área na interface e campos de nome/tipo de área. O CRUD de `PointOfInterest` já funciona em fluxo
+próprio e não está ligado a esse canvas experimental.
 
 * [ ] Criar modo "Desenhar área".
 * [ ] Adicionar vértices.

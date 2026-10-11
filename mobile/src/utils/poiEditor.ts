@@ -12,10 +12,10 @@ import {
 /**
  * Estado em memória do editor de áreas e pontos — o desenho do protótipo.
  *
- * Esta tela é um **protótipo navegável**: o organizador desenha áreas, associa
- * um ponto a cada uma e nada é gravado — o botão "Salvar" abre um diálogo de
- * sucesso e a Sprint 9 liga este estado à `PointOfInterest` real. Por isso o
- * domínio é local (dump no `utils/`, testável) e não toca no `repository`.
+ * Este estado pertence ao canvas experimental de áreas: o organizador desenha
+ * áreas e associa um ponto a cada uma, mas nada é gravado. O fluxo persistido de
+ * `PointOfInterest` usa `PoiForm` e o repositório; esta base continua local e
+ * independente até a Sprint 8 implementar persistência de `Area`.
  *
  * Os tipos espelham o que o `rect` + `anchor` grava na Sprint 7, só que com
  * geometria livre: um cômodo retangular pode virar um `PoiRect`, mas uma área
@@ -24,7 +24,8 @@ import {
  */
 
 /** O catálogo de itens que o organizador coloca nas áreas. */
-export type PoiKind = 'entrance' | 'exit' | 'bathroom' | 'stairs' | 'elevator' | 'reception' | 'accessibility';
+export type PoiKind =
+  'entrance' | 'exit' | 'bathroom' | 'stairs' | 'elevator' | 'reception' | 'accessibility';
 
 /** A ordem da paleta — o caminho que os dois mockups compartilham: entra, sai, usa. */
 export const POI_KIND_ORDER: readonly PoiKind[] = [
@@ -136,8 +137,10 @@ export type PoiEditorAction =
 export const editorFeedback = {
   areaDrawn: 'Área desenhada.',
   poiPlaced: (label: string) => `Ponto adicionado: ${label}.`,
-  poiDuplicate: (label: string) => `Esta área já tem um ponto: ${label}. Troque o item ou apague o atual.`,
-  poiOutsideAreas: 'Os pontos ficam dentro das áreas desenhadas. Crie uma área e toque dentro dela para posicionar o ponto.',
+  poiDuplicate: (label: string) =>
+    `Esta área já tem um ponto: ${label}. Troque o item ou apague o atual.`,
+  poiOutsideAreas:
+    'Os pontos ficam dentro das áreas desenhadas. Crie uma área e toque dentro dela para posicionar o ponto.',
   poiMovedOut: 'O ponto precisa continuar dentro da área.',
   poiSwapped: (label: string) => `Item trocado para ${label}.`,
   areaDeleted: 'Área apagada com o ponto dentro.',
@@ -294,7 +297,12 @@ function placePoi(state: PoiEditorState, position: Coordinate): PoiEditorState {
  * "Trocar item" da barra de ações. A posição é a que já existia — trocar o tipo
  * não deve mover a marcação que o organizador escolheu.
  */
-function swapAreaItem(state: PoiEditorState, areaId: string, kind: PoiKind, position?: Coordinate): PoiEditorState {
+function swapAreaItem(
+  state: PoiEditorState,
+  areaId: string,
+  kind: PoiKind,
+  position?: Coordinate,
+): PoiEditorState {
   const area = state.areas.find((candidate) => candidate.id === areaId);
   if (!area || !area.poiId) return state;
 
@@ -347,7 +355,11 @@ function dropArea(state: PoiEditorState, kind: AreaKind, geometry: AreaRing): Po
  * O gesto altera só os vértices da área. Pontos de interesse associados mantêm
  * suas coordenadas; nenhum outro ponto acompanha ou é puxado para uma borda.
  */
-function updateAreaGeometry(state: PoiEditorState, areaId: string, geometry: AreaRing): PoiEditorState {
+function updateAreaGeometry(
+  state: PoiEditorState,
+  areaId: string,
+  geometry: AreaRing,
+): PoiEditorState {
   const area = state.areas.find((candidate) => candidate.id === areaId);
   if (!area) return state;
 
@@ -373,7 +385,9 @@ function movePoi(state: PoiEditorState, poiId: string, position: Coordinate): Po
     return withFeedback(state, editorFeedback.poiMovedOut);
   }
 
-  const pois = state.pois.map((candidate) => (candidate.id === poiId ? { ...candidate, position } : candidate));
+  const pois = state.pois.map((candidate) =>
+    candidate.id === poiId ? { ...candidate, position } : candidate,
+  );
 
   const next: PoiEditorState = { ...state, pois, interaction: 'idle' };
   return commit(state, next);
@@ -500,11 +514,10 @@ function createPoi(kind: PoiKind, position: Coordinate, areaId: string): PoiDraf
 let idSeed = 0;
 
 /**
- * Ids locais da sessão de edição.
+ * Ids locais da sessão de edição do canvas experimental.
  *
- * O protótipo não persiste nada, então um contador de módulo basta — e a Sprint
- * 9 substitui a chegada da `PointOfInterest` gravada. No reducer, o contador
- * global mantém ids únicos entre duas telas abertas do editor.
+ * O canvas não persiste nada, então um contador de módulo basta. No reducer, o
+ * contador global mantém ids únicos entre duas instâncias abertas do editor.
  */
 function createId(prefix: 'area' | 'poi'): string {
   idSeed += 1;
