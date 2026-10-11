@@ -1,5 +1,4 @@
 import { Stack } from 'expo-router';
-import { Platform } from 'react-native';
 
 import { HeaderActions, HeaderBackButton } from '@/components/header-actions';
 import { headerTheme } from '@/theme/tokens';
@@ -16,18 +15,23 @@ export default function OrganizerLayout() {
     <Stack
       screenOptions={{
         ...headerTheme,
+        headerShown: true,
         headerBackVisible: false,
         headerLeft: (props) => <HeaderBackButton canGoBack={props.canGoBack} />,
         headerRight: () => <HeaderActions />,
-        headerLargeTitle: Platform.OS === 'ios',
+        headerLargeTitle: false,
         animation: 'slide_from_right',
+        // O gesto fica desativado por padrão. As telas com mapa substituem esta
+        // opção via `useMapGestureNavigation`: habilitam o voltar fora do canvas
+        // e o suspendem enquanto há toque/arraste no mapa.
+        gestureEnabled: false,
       }}
     >
       <Stack.Screen
         name="index"
         options={{
           title: 'Eventos',
-          headerLargeTitle: Platform.OS === 'ios',
+          headerLargeTitle: false,
           headerLeft: () => null,
         }}
       />
@@ -36,16 +40,62 @@ export default function OrganizerLayout() {
       <Stack.Screen name="event/[eventId]/details" options={{ title: 'Detalhes do evento' }} />
       <Stack.Screen name="event/[eventId]/edit" options={{ title: 'Editar evento' }} />
       <Stack.Screen name="event/[eventId]/map/new" options={{ title: 'Nova navegação' }} />
-      <Stack.Screen name="event/[eventId]/map/[mapId]" options={{ title: 'Gerenciar navegação' }} />
+      <Stack.Screen
+        name="event/[eventId]/map/[mapId]"
+        options={{
+          title: 'Gerenciar navegação',
+          // O `EventMap` do hub é arrastável: o gesto de voltar do iOS (borda
+          // esquerda) disputaria o toque com o pan do mapa. Desligado — o voltar
+          // continua pelo botão do header.
+          gestureEnabled: false,
+        }}
+      />
       <Stack.Screen
         name="event/[eventId]/map/[mapId]/record"
-        options={{ title: 'Mapear novo caminho' }}
+        options={{
+          title: 'Mapear novo caminho',
+          gestureEnabled: false,
+        }}
+      />
+      <Stack.Screen
+        name="event/[eventId]/map/[mapId]/edit"
+        options={{ title: 'Editar navegação' }}
+      />
+      <Stack.Screen
+        name="event/[eventId]/map/[mapId]/adjust"
+        options={{ title: 'Ajustar rota', gestureEnabled: false }}
+      />
+      <Stack.Screen
+        name="event/[eventId]/map/[mapId]/path/[pathId]/adjust"
+        options={{
+          title: 'Ajustar trajeto',
+          // O `EventMap` é arrastável e a tela é toda dele: o gesto de voltar do
+          // iOS (borda esquerda) disputaria o toque com o pan do mapa, como nas
+          // outras rotas de mapa da área do organizador.
+          gestureEnabled: false,
+        }}
       />
       <Stack.Screen
         name="event/[eventId]/map/[mapId]/details"
         options={{ title: 'Detalhes da navegação' }}
       />
-      <Stack.Screen name="map/[mapId]" options={{ title: 'Editar navegação' }} />
+      <Stack.Screen
+        name="event/[eventId]/map/[mapId]/poi/new"
+        options={{
+          title: 'Adicionar ponto de interesse',
+          // O canvas é arrastável em todos os sentidos: o gesto de voltar do iOS
+          // (borda esquerda) disputaria o toque com o pan do mapa. Desligado
+          // aqui, no registro estático — o voltar continua pelo botão do header.
+          gestureEnabled: false,
+        }}
+      />
+      <Stack.Screen
+        name="event/[eventId]/map/[mapId]/poi/[poiId]"
+        options={{
+          title: 'Editar ponto',
+          gestureEnabled: false,
+        }}
+      />
     </Stack>
   );
 }

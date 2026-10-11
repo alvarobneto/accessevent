@@ -1,13 +1,25 @@
 import type { ReactNode } from 'react';
-import { ScrollView, View } from 'react-native';
+import { RefreshControl, ScrollView, View, type LayoutChangeEvent } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { tv, type VariantProps } from '../lib/tv';
+import { colors } from '../theme/tokens';
 
 type ScreenProps = VariantProps<typeof screenVariants> & {
   children: ReactNode;
   /** Role a rolagem quando o conteúdo não couber na tela. */
   scrollable?: boolean;
+  /**
+   * Interruptor da rolagem quando `scrollable`. A tela do editor desliga durante
+   * o gesto no `MapCanvas`, para o `ScrollView` não competir com o arraste do mapa.
+   */
+  scrollEnabled?: boolean;
+  /** Recarrega o conteúdo quando a pessoa arrasta a tela para baixo. */
+  onRefresh?: () => void;
+  /** Estado controlado do indicador de atualização. */
+  refreshing?: boolean;
+  /** Mede a área útil da tela, inclusive no modo rolável. */
+  onLayout?: (event: LayoutChangeEvent) => void;
   className?: string;
   testID?: string;
   /** Espaçamento interno; o padrão dá respiro lateral e vertical. */
@@ -25,6 +37,10 @@ type ScreenProps = VariantProps<typeof screenVariants> & {
 export function Screen({
   children,
   scrollable,
+  scrollEnabled = true,
+  onRefresh,
+  refreshing = false,
+  onLayout,
   variant = 'canvas',
   className,
   contentClassName,
@@ -35,7 +51,7 @@ export function Screen({
 
   if (!scrollable) {
     return (
-      <View className={containerClass} testID={testID}>
+      <View className={containerClass} testID={testID} onLayout={onLayout}>
         <View className={contentClassName ?? 'gap-6 px-5 py-5'}>{children}</View>
       </View>
     );
@@ -44,11 +60,24 @@ export function Screen({
   return (
     <ScrollView
       testID={testID}
+      onLayout={onLayout}
+      scrollEnabled={scrollEnabled}
       className={containerClass}
       contentContainerClassName={contentClassName ?? 'gap-6 px-5 py-5 pb-8'}
       contentInsetAdjustmentBehavior="automatic"
       keyboardShouldPersistTaps="handled"
       showsVerticalScrollIndicator={false}
+      refreshControl={
+        onRefresh ? (
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+            tintColor={colors.primary}
+            colors={[colors.primary]}
+            accessibilityLabel="Atualizando conteúdo"
+          />
+        ) : undefined
+      }
       style={{ paddingBottom: insets.bottom }}
     >
       {children}

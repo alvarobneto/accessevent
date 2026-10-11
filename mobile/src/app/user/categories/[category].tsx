@@ -22,12 +22,17 @@ export default function CategoryEventsScreen() {
   const key = (category ?? '') as EventCategory;
   const label = eventCategoryLabel(key);
 
-  const { state, reload } = useAsyncData(() => repository.listEvents(key), key);
+  const { state, reload, refreshing } = useAsyncData(() => repository.listEvents(key), key);
 
   useRefreshOnFocus(reload);
 
   return (
-    <Screen scrollable testID="category-events-screen">
+    <Screen
+      scrollable
+      onRefresh={reload}
+      refreshing={refreshing}
+      testID="category-events-screen"
+    >
       <Stack.Screen options={{ title: label }} />
 
       <View className="gap-2 pb-2">

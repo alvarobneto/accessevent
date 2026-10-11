@@ -28,7 +28,12 @@ export default function UserEventDetailsScreen() {
     <>
       <Stack.Screen options={{ title: 'Detalhes do evento' }} />
 
-      <Screen scrollable testID="user-event-details-screen">
+      <Screen
+        scrollable
+        onRefresh={event.reload}
+        refreshing={event.refreshing}
+        testID="user-event-details-screen"
+      >
         <AsyncContent
           state={event.state}
           onRetry={event.reload}

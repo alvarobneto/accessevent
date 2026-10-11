@@ -6,11 +6,15 @@ import { EventEntity } from '../events/event.entity.js';
 import { MapEntity } from '../maps/map.entity.js';
 import { PathEntity } from '../paths/path.entity.js';
 import { UserEntity } from '../users/user.entity.js';
+import { PoiEntity } from '../pois/poi.entity.js';
 import { CreateEventsAndMaps1730000000000 } from './migrations/1730000000000-CreateEventsAndMaps.js';
 import { CreatePaths1730000001000 } from './migrations/1730000001000-CreatePaths.js';
 import { AddEventCategory1730000002000 } from './migrations/1730000002000-AddEventCategory.js';
 import { CreateUsers1730000003000 } from './migrations/1730000003000-CreateUsers.js';
 import { AddPathName1730000004000 } from './migrations/1730000004000-AddPathName.js';
+import { CreatePointsOfInterest1730000005000 } from './migrations/1730000005000-CreatePointsOfInterest.js';
+import { AddPoiRect1730000006000 } from './migrations/1730000006000-AddPoiRect.js';
+import { MakeUserBirthDateOptional1730000007000 } from './migrations/1730000007000-MakeUserBirthDateOptional.js';
 
 /**
  * Entidades e migrações ficam declaradas aqui, e não só via `autoLoadEntities`,
@@ -25,7 +29,13 @@ import { AddPathName1730000004000 } from './migrations/1730000004000-AddPathName
  * uma migração, registre-a aqui — foi o que aconteceu com `AddPathName`, que só
  * apareceu quando a coluna foi conferida no Postgres de verdade.
  */
-export const entities = [EventEntity, MapEntity, PathEntity, UserEntity];
+export const entities = [
+  EventEntity,
+  MapEntity,
+  PathEntity,
+  UserEntity,
+  PoiEntity,
+];
 
 export const migrations = [
   CreateEventsAndMaps1730000000000,
@@ -33,6 +43,9 @@ export const migrations = [
   AddEventCategory1730000002000,
   CreateUsers1730000003000,
   AddPathName1730000004000,
+  CreatePointsOfInterest1730000005000,
+  AddPoiRect1730000006000,
+  MakeUserBirthDateOptional1730000007000,
 ];
 
 /**

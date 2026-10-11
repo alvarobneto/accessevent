@@ -14,6 +14,7 @@ import { ParseUuidPipe } from '../common/parse-uuid-pipe.js';
 
 import { CreatePathDto } from './dto/create-path.dto.js';
 import { UpdatePathDto } from './dto/update-path.dto.js';
+import { UpdatePathGeometryDto } from './dto/update-path-geometry.dto.js';
 import type { PathResponse } from './path.response.js';
 import { PathsService } from './paths.service.js';
 
@@ -63,6 +64,21 @@ export class PathsController {
     @Body() dto: UpdatePathDto,
   ): Promise<PathResponse> {
     return this.paths.update(pathId, dto);
+  }
+
+  /**
+   * Substitui a geometria pelo trajeto ajustado no mapa.
+   *
+   * Rota própria em vez de um campo no `PATCH :pathId`: o renomear não pode
+   * reescrever o trajeto por engano, e a geometria nova pede validação e cálculo
+   * de distância distintos dos do nome.
+   */
+  @Patch(':pathId/geometry')
+  async replaceGeometry(
+    @Param('pathId', ParseUuidPipe()) pathId: string,
+    @Body() dto: UpdatePathGeometryDto,
+  ): Promise<PathResponse> {
+    return this.paths.replaceGeometry(pathId, dto.geometry);
   }
 
   @Delete(':pathId')

@@ -1,6 +1,6 @@
-import type { Path } from '@/data/types';
+import type { Path, PointOfInterest } from '@/data/types';
 
-import { polylinesFromPaths } from './mapContent';
+import { markersFromPois, polylinesFromPaths, rectsFromPois } from './mapContent';
 
 function makePath(overrides: Partial<Path> = {}): Path {
   return {
@@ -12,6 +12,26 @@ function makePath(overrides: Partial<Path> = {}): Path {
     ],
     distance: 111.2,
     name: null,
+    createdAt: '2026-09-02T10:00:00.000Z',
+    updatedAt: '2026-09-02T10:00:00.000Z',
+    ...overrides,
+  };
+}
+
+function makePoi(overrides: Partial<PointOfInterest> = {}): PointOfInterest {
+  return {
+    id: 'poi-1',
+    mapId: 'map-1',
+    name: 'Entrada principal',
+    type: 'Entrada',
+    rect: {
+      northEast: [-23.550498, -46.633298],
+      southWest: [-23.550502, -46.633302],
+    },
+    anchor: { u: 0.5, v: 0.5 },
+    position: [-23.5505, -46.6333],
+    description: null,
+    accessibilityInfo: null,
     createdAt: '2026-09-02T10:00:00.000Z',
     updatedAt: '2026-09-02T10:00:00.000Z',
     ...overrides,
@@ -71,5 +91,97 @@ describe('polylinesFromPaths', () => {
     // A geometria passa inteira para o `EventMap`, que já filtra na borda do
     // desenho; o filtro aqui existe para não declarar um trajeto sem trecho.
     expect(result[0]?.geometry).toHaveLength(3);
+  });
+});
+
+describe('markersFromPois', () => {
+  it('returns nothing for an empty list', () => {
+    expect(markersFromPois([])).toEqual([]);
+  });
+
+  it('keeps the id, the position and the name of each point', () => {
+    const result = markersFromPois([makePoi({ id: 'a' }), makePoi({ id: 'b' })]);
+
+    expect(result.map((marker) => marker.id)).toEqual(['a', 'b']);
+    expect(result[0]?.coordinate).toEqual([-23.5505, -46.6333]);
+    expect(result[0]?.label).toBe('Entrada principal');
+  });
+
+  it('carries the type as the callout line, whatever the description is', () => {
+    const [marker] = markersFromPois([makePoi({ type: 'Elevador' })]);
+
+    expect(marker?.description).toBe('Elevador');
+  });
+
+  it('does not show the description as the callout line', () => {
+    // A descrição do ponto sai da UI da Sprint 7 (o formulário ficou só com nome
+    // e tipo), e o balão do marcador é o lugar onde o tipo precisa estar dito —
+    // não o lugar de uma frase que o organizador talvez nem tenha escrito.
+    const [marker] = markersFromPois([makePoi({ description: 'Segundo andar' })]);
+
+    expect(marker?.description).toBe('Entrada');
+  });
+
+  it('gives each marker the icon of its own type', () => {
+    const [bathroom, elevator] = markersFromPois([
+      makePoi({ id: 'a', type: 'Banheiro' }),
+      makePoi({ id: 'b', type: 'Elevador' }),
+    ]);
+
+    expect(bathroom?.icon).toBe('bathroom');
+    expect(elevator?.icon).toBe('elevator');
+    expect(bathroom?.icon).not.toBe(elevator?.icon);
+  });
+
+  it('skips a point whose position is out of the globe', () => {
+    expect(markersFromPois([makePoi({ position: [91, 0] })])).toEqual([]);
+    expect(markersFromPois([makePoi({ position: [Number.NaN, -46.6333] })])).toEqual([]);
+  });
+
+  it('leaves the tone unset and the press unset, for the screen to decide', () => {
+    const [marker] = markersFromPois([makePoi()]);
+
+    expect(marker?.tone).toBeUndefined();
+    expect(marker?.onPress).toBeUndefined();
+  });
+});
+
+describe('rectsFromPois', () => {
+  it('returns nothing for an empty list', () => {
+    expect(rectsFromPois([])).toEqual([]);
+  });
+
+  it('keeps the id and the rect of each point', () => {
+    const result = rectsFromPois([makePoi({ id: 'a' }), makePoi({ id: 'b' })]);
+
+    expect(result.map((rect) => rect.id)).toEqual(['a', 'b']);
+    expect(result[0]?.rect).toEqual({
+      northEast: [-23.550498, -46.633298],
+      southWest: [-23.550502, -46.633302],
+    });
+  });
+
+  it('draws a saved point without the resize affordance, because editing is a screen', () => {
+    const [rect] = rectsFromPois([makePoi()]);
+
+    expect(rect?.editable).toBeUndefined();
+    expect(rect?.onResize).toBeUndefined();
+    expect(rect?.tone).toBeUndefined();
+  });
+
+  it('skips a point whose rect has a corner out of the globe', () => {
+    const broken = makePoi({
+      rect: { northEast: [91, -46.633298], southWest: [-23.550502, -46.633302] },
+    });
+
+    expect(rectsFromPois([broken])).toEqual([]);
+  });
+
+  it('skips a rect whose corners are swapped, because it would draw as negative area', () => {
+    const inverted = makePoi({
+      rect: { northEast: [-23.550502, -46.633302], southWest: [-23.550498, -46.633298] },
+    });
+
+    expect(rectsFromPois([inverted])).toEqual([]);
   });
 });

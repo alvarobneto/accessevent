@@ -107,6 +107,18 @@ Ao final desta fase:
 
 > O organizador consegue criar um evento e acessar o espaço onde o mapa será construído.
 
+### Autenticação adicionada posteriormente — parcial, fora da sequência original
+
+* [x] Telas de cadastro e login; endpoints `POST /users/signup` e `POST /users/login`.
+* [x] Senha com hash bcrypt, JWT emitido no login e token guardado no `expo-secure-store`; há ação
+      de logout no perfil.
+* [ ] A autorização ainda não está integrada: `apiClient` não envia o bearer token, as rotas de
+      negócio não usam guard JWT e não há papel/controle de acesso por organizador.
+
+Esse trabalho não fecha o Epic 1 de autenticação do PRD §26. A Sprint 1 removeu o login fictício do
+protótipo; o cadastro/login real foi acrescentado depois e precisa de uma tarefa explícita antes de
+considerar autenticação pronta.
+
 ---
 
 # Fase 2 — Mapeamento do ambiente
@@ -129,14 +141,20 @@ Ao final desta fase:
       `toLatLng` em `mobile/src/utils/geo.ts` é a única conversão para o `react-native-maps`.
 - [x] `EventMap` é o único arquivo do app que importa `react-native-maps`; as telas do organizador
       e do participante passam a desenhar o mapa de verdade.
-- [x] Enquadramento por conteúdo, com piso de 220 m e 48 px de folga: mapa de pavilhão tem poucos
-      pontos e não pode abrir no zoom do planeta. A câmera só se move quando o conteúdo muda, nunca
-      a cada render, para não tirar o mapa da mão de quem está arrastando.
+- [x] Enquadramento por conteúdo: mapas pequenos abrem no zoom padrão de 0,000512° (máximo menos
+      dois passos de zoom out); geometrias maiores se afastam o necessário para caber inteiras. A
+      câmera só se move quando o conteúdo muda, nunca por identidade de array a cada render.
 - [x] Pino do marcador desenhado pelo app (disco com anel branco) em vez do pino do sistema, para
       o marcador não mudar de forma e cor entre plataformas; giro e inclinação desligados pela
       acessibilidade (RNF04), zoom e arraste mantidos.
-- [x] Config plugin `react-native-maps` registrado em `app.json` sem chave: Apple Maps no iOS e
-      Google Maps no Android. `PROVIDER_GOOGLE` e as chaves ficam para a publicação em loja.
+- [x] `react-native-maps` usa Apple Maps no iOS e Google Maps no Android. O Android recebe a chave
+      obrigatória por `app.config.ts`; trocar a chave exige build nativo novo.
+- [x] Fundo OSM compartilhado por `MapCanvas` e `EventMap`, com atribuição e cache de sete dias.
+      O `EventMap` usa `maximumNativeZ=19`, ampliando o tile de maior resolução em vez de deixar o
+      fundo desaparecer ao aproximar além do limite dos tiles. A nitidez final ainda requer teste
+      visual em aparelho, porque Apple Maps e Google Maps desenham a sobreposição de formas distintas.
+- [x] Controles de zoom +/− nas telas com mapa; o zoom inicial é o máximo menos dois passos. Os
+      mapas com conteúdo preservam a geometria inteira e só se afastam mais quando necessário.
 - [x] Lint, typecheck e formatação limpos no mobile.
 
 **Fora desta sprint, por decisão de escopo:** não há `Path` nem `PointOfInterest` no repositório até
@@ -400,9 +418,9 @@ mover e excluir ponto são da Sprint 7, junto com os pontos de interesse.
       O botão de apagar virou `trailingAction` do `ListRow` — fora da área tocável
       da linha, porque botão dentro do botão da linha desaparece para o leitor de
       tela.
-* [ ] Adicionar ponto. (Sprint 7)
-* [ ] Mover ponto. (Sprint 7)
-* [ ] Excluir ponto. (Sprint 7)
+* [ ] Adicionar ponto persistido. (Sprint 7; falta ligar o fluxo de criação ao repositório)
+* [x] Mover ponto. (Sprint 7)
+* [x] Excluir ponto. (Sprint 7)
 
 > **A migração é registrada à mão** em `backend/src/database/typeorm.options.ts`.
 > Um arquivo novo em `migrations/` que não entrar no array `migrations` compila,
@@ -429,14 +447,56 @@ Posto médico
 Outro
 ```
 
-* [ ] Criar `PointOfInterest`.
-* [ ] Adicionar ponto.
-* [ ] Posicionar ponto.
-* [ ] Mover ponto.
-* [ ] Editar ponto.
-* [ ] Remover ponto.
+* [x] Criar `PointOfInterest`.
+* [ ] Adicionar ponto pela tela de criação e persistir na navegação. O `POST /maps/:mapId/pois`
+      existe, mas `/poi/new` ainda termina num diálogo de protótipo e não chama
+      `repository.createPoi`.
+* [ ] Posicionar e persistir o ponto novo. A interação de toque/arraste existe no protótipo em
+      memória; falta ligá-la ao fluxo de criação real.
+* [x] Mover ponto.
+* [x] Editar ponto.
+* [x] Remover ponto.
+
+A posição se escolhe **arrastando um ícone da paleta até o lugar no mapa**, ou
+tocando no tipo e depois no mapa, ou tocando no ponto já colocado e depois no
+destino. O **nome é opcional**: sem nome, o ponto aparece pelo ícone e pelo tipo,
+que é o que o organizador sabe dizer sem digitar rótulo. Descrição e informação de
+acessibilidade **não estão nesta sprint** — os campos existem no domínio e na API
+para a Sprint 10, mas o formulário da Sprint 7 é o cadastro do ponto.
+
+**O que se grava é um retângulo e uma âncora, não um ponto.** O organizador marca
+uma **área** — "é aqui" — e o ícone fica ancorado dentro dela: `rect` (dois cantos
+opostos) e `anchor` (`u`/`v` de 0 a 1). A `position` absoluta é **derivada pela
+API** a partir dos dois, e a coluna `position` saiu do banco
+(`AddPoiRect1730000006000`, com backfill de `anchor` central). Guardar os três
+deixaria o banco aceitar um ponto que não corresponde à caixa desenhada. A caixa e
+o ícone andam juntos: arrastar o ícone move os dois, e redimensionar a caixa move o
+ícone **dentro** dela mantendo a âncora. As alças de canto têm ação equivalente
+para leitor de tela (`increment`/`decrement`), porque quem não arrasta não pode
+redimensionar de outro jeito.
+
+O mapa **não é mais redimensionável**. A altura da janela do mapa não é o
+enquadramento: o enquadramento é o zoom, e o tamanho da marcação é o retângulo.
+Redimensionar a janela só mudava o zoom inicial, com dois controles para a mesma
+coisa.
+
+**Estado real da Sprint 7:** entidade, migração, endpoints e edição/remoção de POIs estão feitos;
+mas a criação do POI pela interface ainda não grava. O `/poi/new` é um protótipo local de área/POI.
+A integração do `poiEditorReducer` com `PointOfInterest` está anotada para a Sprint 9 no
+`mobile/AGENTS.md`; até ela entrar, a criação persistida continua sendo uma pendência/carry-over e
+a Sprint 7 não está fechada de ponta a ponta.
 
 ### Sprint 8 — Áreas
+
+**Protótipo já implementado, mas não conta como conclusão desta sprint:** a tela `poi/new` usa
+`MapCanvas` com fundo OSM, desenha retângulos e formas livres, fecha o anel ao terminar o gesto,
+permite mover/editar vértices, pan/zoom, desfazer e colocar um tipo de ponto dentro de cada área.
+Tudo vive no estado local do `poiEditorReducer`; “Salvar” só abre um diálogo e nada sobrevive ao
+sair da tela.
+
+Ainda faltam persistência de `Area` (entidade/API/migração), salvar e recarregar, controle de remoção
+de área na interface e campos de nome/tipo de área. O CRUD de `PointOfInterest` ainda não está
+ligado a esse protótipo.
 
 * [ ] Criar modo "Desenhar área".
 * [ ] Adicionar vértices.
@@ -453,6 +513,57 @@ Exemplos:
 * Área de exposição;
 * Foyer;
 * Auditório.
+
+### Ajuste manual do trajeto e edição da navegação (decisão de equipe)
+
+Escopo acrescentado depois da Sprint 6: a gravação do GPS entrega o trajeto, mas
+não a coordenada correta — o organizador precisa consertar a linha no mapa, e as
+portas de edição precisavam caber sem virar uma barra de ferramentas em cima do
+desenho. Backend e mobile estão entregues.
+
+**Backend**
+
+* [x] `PATCH /paths/:pathId/geometry` recebe só `{ geometry }` e grava o trajeto
+      ajustado; `PATCH /paths/:pathId` continua aceitando **só** `name`, então os
+      dois comandos não se misturam.
+* [x] Geometria de comprimento zero volta 400 com mensagem própria
+      ("O trajeto ajustado tem comprimento zero. Desfaça os ajustes.") em vez de
+      gravar um caminho apagado.
+* [x] Distância e `updatedAt` são recalculados pela API a partir da geometria
+      enviada — o cliente nunca envia metadados derivados.
+* [x] Validação de geometria (`IsMapGeometry`) compartilhada com a criação do
+      mapa; 16 unit + 32 e2e verdes (`src/paths/`).
+
+**Mobile**
+
+* [x] `replacePathGeometry(pathId, geometry)` nas três implementações do
+      repositório (http, memória, contrato).
+* [x] `src/utils/pathGeometry.ts` com teste: mover vértice, inserir vértice no
+      meio de um trecho, nudge acessível de vértice e de trecho, e a escolha
+      dos índices que viram alvos.
+* [x] `MapPolyline` ganhou `editable` + `onPreview`/`onCommit`; a camada
+      `PathEditOverlay` desenha vértices e alvos de trecho e projeta no dedo
+      durante o arraste.
+* [x] Hub (`/map/[mapId]`) virou consulta com o botão **"Editar a navegação"**;
+      o editor de nome e as três portas ficaram em `/map/[mapId]/edit`.
+* [x] `/map/[mapId]/adjust` lista os caminhos do mapa e abre
+      `/path/[pathId]/adjust`, que pré-carrega caminho + caminhos + pontos num
+      `AsyncContent` só, arrasta com rascunho local e só grava em
+      **"Salvar ajuste"** — fica na tela e mostra a confirmação.
+* [x] Menu de navegação perdeu o item "Editar navegação" (organizador passou a
+      ter só "Ver detalhes" na consulta); a tela antiga `/organizer/map/[mapId]`
+      foi apagada e o card de rename mudou para `/edit`.
+* [x] Editor do caminho (`/path/[pathId]`) ganhou o botão "Ajustar trajeto no
+      mapa", que empurra para o ajuste já com o caminho escolhido.
+
+> **Decisão sobre pinça e alcance do ajuste:** faixas e alças recusam gesto de
+> dois dedos (`touches.length > 1`), então a pinça não é mais engolida pela
+> faixa. O toque na faixa perto de um vértice (a menos de `VERTEX_GRAB_RADIUS`
+> de uma ponta do trecho) arrasta aquele vértice — não são só as pontas do
+> trajeto que dão para ajustar. Longe das duas pontas, o gesto continua
+> inserindo um ponto novo no trecho (PRD §10.2). No iOS, a faixa é uma view
+> sobre o mapa e é ela o alvo do toque: a pinça que começa sobre a linha não
+> chega ao mapa (a que começa fora da linha funciona).
 
 ### Resultado da fase
 
@@ -475,6 +586,10 @@ O organizador consegue transformar os caminhos registrados em uma representaçã
 **Objetivo:** adicionar as informações necessárias para que o sistema consiga diferenciar caminhos acessíveis de caminhos inadequados.
 
 ### Sprint 9 — Características dos caminhos
+
+**Carry-over já identificado:** ligar o editor local `/poi/new` ao domínio persistido de
+`PointOfInterest`, incluindo o fluxo de criação (`repository.createPoi`) e a reabertura do ponto
+salvo. Isto integra o protótipo da Sprint 8 ao CRUD implementado na Sprint 7.
 
 Adicionar:
 
@@ -547,11 +662,18 @@ O mapa deixa de ser apenas uma representação espacial e passa a possuir **dado
 ### Sprint 12 — Visualização do mapa
 
 * [ ] Listar eventos publicados.
-* [ ] Abrir evento.
-* [ ] Visualizar mapa.
-* [ ] Visualizar pontos.
-* [ ] Visualizar áreas.
-* [ ] Consultar informações.
+* [x] Abrir evento.
+* [x] Visualizar mapa.
+* [x] Visualizar pontos.
+* [x] Visualizar áreas (marcações retangulares dos pontos de interesse).
+* [x] Consultar informações gerais do evento/mapa; detalhes de acessibilidade dos POIs ainda ficam
+      para a Sprint 10.
+
+**Entregue antes da sprint:** `/user/map/[mapId]` carrega caminhos e pontos e os desenha no
+`EventMap`; aguarda essas consultas antes de montar a câmera para não abrir no centro genérico de
+São Paulo. A aba Explorar já tem busca, categorias e favoritos locais em `expo-secure-store`, itens
+que não estavam detalhados neste plano. A listagem ainda não filtra pelo estado `PUBLISHED`, que
+continua na Sprint 19.
 
 ### Sprint 13 — Localização manual
 

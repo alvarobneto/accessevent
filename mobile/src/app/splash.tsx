@@ -283,8 +283,13 @@ export default function SplashScreen() {
           <RNText style={[styles.headline, styles.headlineAccent]}>incluem.</RNText>
         </RNText>
 
-        {/* Subtítulo: variant caption tint muted */}
-        <Text variant="caption" tint="muted" className="mb-6 mt-2" style={styles.subtitleWidth}>
+        {/* Subtítulo sobre o fundo escuro: branco para manter contraste legível. */}
+        <Text
+          variant="caption"
+          tint="inverse"
+          className="mb-6 mt-2 font-medium"
+          style={styles.subtitleWidth}
+        >
           Descubra lugares e eventos acessíveis perto de você.
         </Text>
 
@@ -300,8 +305,8 @@ export default function SplashScreen() {
           <Icon name="arrow-right" size={20} color={colors.white} />
         </TouchableOpacity>
 
-        {/* Footnote: variant caption tint muted centrado */}
-        <Text variant="caption" tint="muted" centered>
+        {/* Footnote sobre o fundo escuro: branco para manter contraste legível. */}
+        <Text variant="caption" tint="inverse" centered className="font-medium">
           Acessibilidade para viver mais.
         </Text>
       </View>
@@ -487,7 +492,7 @@ const styles = StyleSheet.create({
   headlineAccent: {
     color: GLOW_BLUE,
   },
-  // Largura máxima do subtítulo (só layout, cor vem do tint="muted")
+  // Largura máxima do subtítulo (só layout, cor vem do tint="inverse")
   subtitleWidth: {
     maxWidth: 260,
   },

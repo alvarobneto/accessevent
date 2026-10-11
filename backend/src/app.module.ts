@@ -13,6 +13,7 @@ import { EventsModule } from './events/events.module.js';
 import { HealthModule } from './health/health.module.js';
 import { MapsModule } from './maps/maps.module.js';
 import { PathsModule } from './paths/paths.module.js';
+import { PoisModule } from './pois/pois.module.js';
 import { UsersModule } from './users/users.module.js';
 
 @Module({
@@ -34,6 +35,7 @@ import { UsersModule } from './users/users.module.js';
     HealthModule,
     MapsModule,
     PathsModule,
+    PoisModule,
     UsersModule,
   ],
 })

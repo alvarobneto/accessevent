@@ -3,7 +3,6 @@ import { Stack, router, useLocalSearchParams } from 'expo-router';
 import { AsyncContent } from '@/components/async-content';
 import { DeleteAction } from '@/components/delete-action';
 import { NavigationDetailsView } from '@/components/navigation-details-view';
-import { NavigationMenu } from '@/components/navigation-menu';
 import { Screen } from '@/components/screen';
 import { Button, EmptyState } from '@/components/ui';
 import { repository } from '@/data';
@@ -15,8 +14,13 @@ import { useRefreshOnFocus } from '@/hooks/useRefreshOnFocus';
  * destino de "Ver detalhes" no menu da tela da navegação, e repete o combinado do
  * evento: a tela do dia a dia mostra o que existe, os dados ficam num lugar só.
  *
- * Recarrega no foco pelo mesmo motivo da tela de detalhes do evento: o editor de
- * título é alcançado daqui e volta com `router.back()`.
+ * Não tem menu no cabeçalho: ele só teria "Ver detalhes", que é a própria tela
+ * (regra que vale para evento e navegação). O editor de título saiu do menu
+ * quando "Editar a navegação" virou botão do hub, e apagar continua embaixo, no
+ * corpo da tela, pelo motivo do `DeleteAction`.
+ *
+ * Recarrega no foco pelo mesmo motivo da tela de detalhes do evento: o editor do
+ * hub é alcançado de outra pilha e, ao voltar, este snapshot estaria velho.
  */
 export default function NavigationDetailsScreen() {
   const { eventId, mapId } = useLocalSearchParams<{ eventId: string; mapId: string }>();
@@ -27,20 +31,20 @@ export default function NavigationDetailsScreen() {
 
   useRefreshOnFocus(navigation.reload);
 
-  const mapName = navigation.state.status === 'success' ? navigation.state.data?.name : null;
-
   return (
     <>
       <Stack.Screen
         options={{
           title: 'Detalhes da navegação',
-          headerRight: () => (
-            <NavigationMenu mapId={id} mapName={mapName ?? undefined} showDetails={false} />
-          ),
         }}
       />
 
-      <Screen scrollable testID="navigation-details-screen">
+      <Screen
+        scrollable
+        onRefresh={navigation.reload}
+        refreshing={navigation.refreshing}
+        testID="navigation-details-screen"
+      >
         <AsyncContent
           state={navigation.state}
           onRetry={navigation.reload}

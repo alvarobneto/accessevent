@@ -12,10 +12,11 @@ import { useFocusEffect } from 'expo-router';
  * delas).
  *
  * O primeiro foco é ignorado de propósito — ele é o carregamento inicial, que o
- * `useAsyncData` já faz. O callback fica numa ref para que a identidade do
- * efeito não dependa de como a tela montou o `refresh`.
+ * `useAsyncData` já faz. O recarregamento de foco é silencioso e não acende o
+ * indicador de pull-to-refresh. O callback fica numa ref para que a identidade
+ * do efeito não dependa de como a tela montou o `refresh`.
  */
-export function useRefreshOnFocus(refresh: () => void): void {
+export function useRefreshOnFocus(refresh: (showIndicator: boolean) => void): void {
   const isFirstFocus = useRef(true);
   const refreshRef = useRef(refresh);
 
@@ -30,7 +31,7 @@ export function useRefreshOnFocus(refresh: () => void): void {
         return;
       }
 
-      refreshRef.current();
+      refreshRef.current(false);
     }, []),
   );
 }

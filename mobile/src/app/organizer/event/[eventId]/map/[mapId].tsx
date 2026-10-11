@@ -1,32 +1,35 @@
 import { Stack, router, useLocalSearchParams } from 'expo-router';
 import { useCallback, useMemo } from 'react';
-import { View } from 'react-native';
+import { ActivityIndicator, View } from 'react-native';
 
 import { AsyncContent } from '@/components/async-content';
 import { EventMap } from '@/components/map';
 import { NavigationMenu } from '@/components/navigation-menu';
 import { NoPathsHint, PathList } from '@/components/path-list';
+import { NoPoisHint, PoiList } from '@/components/poi-list';
 import { Screen } from '@/components/screen';
 import { Section } from '@/components/section';
 import { Badge, Button, Card, EmptyState, Icon, Text } from '@/components/ui';
 import { repository } from '@/data';
-import type { Path } from '@/data/types';
+import type { Path, PointOfInterest } from '@/data/types';
 import { useAsyncData } from '@/hooks/useAsyncData';
+import { useMapGestureNavigation } from '@/hooks/useMapGestureNavigation';
 import { useRefreshOnFocus } from '@/hooks/useRefreshOnFocus';
 import { colors } from '@/theme/tokens';
-import { polylinesFromPaths } from '@/utils/mapContent';
+import { markersFromPois, polylinesFromPaths, rectsFromPois } from '@/utils/mapContent';
 
 /**
- * Lista vazia com identidade estável.
+ * Listas vazias com identidade estável.
  *
  * O `EventMap` reenquadra a câmera quando o conteúdo muda, e um array novo a cada
  * render com o mesmo conteúdo faria a tela recomputar as polilinhas sem parar. Com
  * uma constante, o `useMemo` abaixo só depende do conteúdo de verdade.
  */
 const NO_PATHS: readonly Path[] = [];
+const NO_POIS: readonly PointOfInterest[] = [];
 
 /**
- * Gerenciar Navegação: o mapa e o que ainda vai existir nele.
+ * Gerenciar Navegação: o mapa e o que já existe nele (modo consulta).
  *
  * É o destino do item da lista de navegações do evento, e o editor fica a um
  * toque de distância pelo menu de três pontinhos — o mesmo combinado do evento: o
@@ -34,39 +37,64 @@ const NO_PATHS: readonly Path[] = [];
  * navegação (nome, datas) não aparecem aqui: eles têm tela própria, atrás de
  * "Ver detalhes".
  *
- * Esta tela é o **hub** do mapa: mostra os caminhos já gravados sobre o mapa e é
- * de onde sai a gravação. A gravação mora em `/record` (PRD §9.2) porque é uma
- * tarefa com início, acompanhamento e fim — emaranhada aqui, ela empurraria para
- * baixo a lista de caminhos, que é o que a tela tem que mostrar.
+ * Esta tela é o **hub** do mapa, e virou consulta: mostra o desenho e as listas,
+ * e as portas de edição da navegação (renomear, ajustar trajeto, gravar caminho,
+ * marcar ponto) saíram para `/edit` — é o botão "Editar a navegação" que leva
+ * lá. Três botões de ação no meio do mapa competiam com o próprio mapa; quem já
+ * veio editar faz um toque a mais e ganha uma tela com um trabalho só.
  *
- * Navegação e caminhos são carregados separados: a lista falhar não pode apagar o
- * mapa da tela, e o `useRefreshOnFocus` recarrega os dois quando a pessoa volta da
- * gravação — o caminho salvo em `/record` precisa aparecer aqui sem exigir uma ida
- * até a tela de escolha de modo.
+ * As **listas continuam aqui** com toque e apagar: a linha da lista é a porta
+ * com alvo de toque grande e nome legível (ver `PathList`/`PoiList`), e apagar é
+ * ação do corpo da tela, não do editor.
  *
- * O desenho é o `EventMap` da Sprint 3; os pontos de interesse entram na Sprint 7.
+ * Navegação, caminhos e pontos são carregados separados: a lista falhar não pode
+ * apagar o mapa da tela, e o `useRefreshOnFocus` recarrega as três quando a pessoa
+ * volta da gravação ou do editor de ponto — o que foi salvo precisa aparecer aqui
+ * sem exigir uma ida até a tela de escolha de modo.
+ *
+ * O desenho é o `EventMap` da Sprint 3, com os pontos de interesse da Sprint 7
+ * como marcadores e os caminhos como trajetos. Ambos abrem o editor pelo toque no
+ * desenho, e ambos também têm linha na lista.
  */
 export default function ManageNavigationMapScreen() {
   const { eventId, mapId } = useLocalSearchParams<{ eventId: string; mapId: string }>();
   const id = mapId ?? '';
+  const mapGestures = useMapGestureNavigation();
 
   const map = useAsyncData(() => repository.getNavigationMap(id), id);
   const savedPaths = useAsyncData(() => repository.listPaths(id), id);
+  const savedPois = useAsyncData(() => repository.listPois(id), id);
 
-  useRefreshOnFocus(() => {
-    map.reload();
-    savedPaths.reload();
+  useRefreshOnFocus((showIndicator) => {
+    map.reload(showIndicator);
+    savedPaths.reload(showIndicator);
+    savedPois.reload(showIndicator);
   });
 
   const navigationName = map.state.status === 'success' ? map.state.data?.name : null;
 
   const paths = savedPaths.state.status === 'success' ? savedPaths.state.data : NO_PATHS;
+  const pois = savedPois.state.status === 'success' ? savedPois.state.data : NO_POIS;
+  // Não montar a câmera sem os dados que localizam o mapa: `initialRegion` vale
+  // só na montagem, e o centro de fallback não representa o local do evento.
+  const isMapContentLoading =
+    savedPaths.state.status === 'loading' || savedPois.state.status === 'loading';
 
   const openPathEditor = useCallback(
     (pathId: string) => {
       router.push({
         pathname: '/organizer/event/[eventId]/map/[mapId]/path/[pathId]',
         params: { eventId, mapId: id, pathId },
+      });
+    },
+    [eventId, id],
+  );
+
+  const openPoiEditor = useCallback(
+    (poiId: string) => {
+      router.push({
+        pathname: '/organizer/event/[eventId]/map/[mapId]/poi/[poiId]',
+        params: { eventId, mapId: id, poiId },
       });
     },
     [eventId, id],
@@ -85,10 +113,36 @@ export default function ManageNavigationMapScreen() {
     [paths, openPathEditor],
   );
 
+  // O marcador é a mesma segunda porta do trajeto: tocar no pino abre o editor do
+  // ponto. O `tone` fica no padrão — ver `MapMarker`.
+  const markers = useMemo(
+    () =>
+      markersFromPois(pois).map((marker) => ({
+        ...marker,
+        onPress: () => openPoiEditor(marker.id),
+      })),
+    [pois, openPoiEditor],
+  );
+  const rects = useMemo(() => rectsFromPois(pois), [pois]);
+
+  const mapAccessibilityLabel = [
+    'Mapa da navegação',
+    paths.length > 0
+      ? `${paths.length} ${paths.length === 1 ? 'caminho registrado' : 'caminhos registrados'}`
+      : null,
+    pois.length > 0
+      ? `${pois.length} ${pois.length === 1 ? 'ponto de interesse' : 'pontos de interesse'}`
+      : null,
+  ]
+    .filter((part) => part !== null)
+    .join(' com ');
+
   return (
     <>
       <Stack.Screen
         options={{
+          ...mapGestures.screenOptions,
+          headerShown: true,
           title: navigationName ?? 'Navegação',
           headerRight: () => (
             <NavigationMenu eventId={eventId} mapId={id} mapName={navigationName ?? undefined} />
@@ -96,40 +150,74 @@ export default function ManageNavigationMapScreen() {
         }}
       />
 
-      <Screen scrollable testID="manage-navigation-map-screen">
+      <Screen
+        scrollable
+        onRefresh={() => {
+          map.reload();
+          savedPaths.reload();
+          savedPois.reload();
+        }}
+        refreshing={map.refreshing || savedPaths.refreshing || savedPois.refreshing}
+        testID="manage-navigation-map-screen"
+      >
         <AsyncContent state={map.state} onRetry={map.reload} loadingLabel="Carregando a navegação…">
           {(data) =>
             data ? (
               <>
                 <View className="gap-3">
-                  <EventMap
-                    className="h-72 rounded-lg border border-border"
-                    polylines={polylines}
-                    accessibilityLabel={
-                      paths.length > 0
-                        ? `Mapa da navegação com ${paths.length} ${
-                            paths.length === 1 ? 'caminho registrado' : 'caminhos registrados'
-                          }`
-                        : 'Mapa da navegação'
-                    }
-                  />
+                  <View className="h-72" {...mapGestures.touchHandlers}>
+                    {isMapContentLoading ? (
+                      <View
+                        className="h-full items-center justify-center gap-2 rounded-lg border border-border bg-surface"
+                        accessibilityLabel="Carregando o mapa"
+                        accessibilityLiveRegion="polite"
+                      >
+                        <ActivityIndicator color={colors.primary} />
+                        <Text variant="caption" tint="muted">
+                          Carregando o mapa…
+                        </Text>
+                      </View>
+                    ) : (
+                      <EventMap
+                        className="h-full rounded-lg border border-border"
+                        markers={markers}
+                        polylines={polylines}
+                        rects={rects}
+                        accessibilityLabel={mapAccessibilityLabel}
+                        fitPadding={12}
+                      />
+                    )}
+                  </View>
                   <Text variant="caption">
                     O mapa é desenhado a partir dos caminhos que você percorre no local. Toque em um
-                    trajeto para renomeá-lo.
+                    trajeto ou em um ponto para abri-lo.
                   </Text>
                 </View>
 
                 <Button
-                  label="Mapear novo caminho"
-                  iconStart={<Icon name="map-marker-path" size={20} color={colors.white} />}
+                  label="Editar a navegação"
+                  iconStart={<Icon name="pencil" size={20} color={colors.white} />}
                   onPress={() =>
                     router.push({
-                      pathname: '/organizer/event/[eventId]/map/[mapId]/record',
+                      pathname: '/organizer/event/[eventId]/map/[mapId]/edit',
                       params: { eventId, mapId: id },
                     })
                   }
                   fullWidth
+                  testID="edit-navigation"
                 />
+
+                <AsyncContent
+                  state={savedPois.state}
+                  onRetry={savedPois.reload}
+                  loadingLabel="Carregando os pontos…"
+                  isEmpty={(list) => list.length === 0}
+                  empty={<NoPoisHint />}
+                >
+                  {(list) => (
+                    <PoiList pois={list} onOpen={openPoiEditor} onChanged={savedPois.reload} />
+                  )}
+                </AsyncContent>
 
                 <AsyncContent
                   state={savedPaths.state}
@@ -145,14 +233,9 @@ export default function ManageNavigationMapScreen() {
 
                 <Section
                   title="O que vem a seguir"
-                  description="A navegação pode ser renomeada a qualquer momento pelo menu acima."
+                  description="Renomear, ajustar trajetos e cadastrar pontos ficam em “Editar a navegação”."
                 >
                   <Card variant="soft">
-                    <UpcomingItem
-                      icon="map-marker-multiple-outline"
-                      title="Pontos de interesse"
-                      description="Entradas, banheiros, elevadores, escadas e balcões de informação."
-                    />
                     <UpcomingItem
                       icon="wheelchair-accessibility"
                       title="Acessibilidade dos caminhos"
@@ -182,7 +265,7 @@ export default function ManageNavigationMapScreen() {
 }
 
 type UpcomingItemProps = {
-  icon: 'map-marker-multiple-outline' | 'wheelchair-accessibility';
+  icon: 'wheelchair-accessibility';
   title: string;
   description: string;
 };

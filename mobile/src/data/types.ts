@@ -1,4 +1,6 @@
 import type { MapGeometry } from '@/types/map';
+import type { Coordinate } from '@/types/coordinates';
+import type { PoiAnchor, PoiRect } from '@/utils/poiAnchor';
 
 /**
  * Tipos do domínio. Os nomes seguem o modelo do PRD §23, em inglês, e a
@@ -71,6 +73,47 @@ export type Path = {
   distance: number;
   /** Nome que o organizador deu ao caminho, ou `null` se ele ainda não nomeou. */
   name: string | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export const PoiTypeValues = [
+  'Entrada',
+  'Saída',
+  'Banheiro',
+  'Banheiro acessível',
+  'Elevador',
+  'Escada',
+  'Rampa',
+  'Auditório',
+  'Sala',
+  'Alimentação',
+  'Atendimento',
+  'Posto médico',
+  'Outro',
+] as const;
+
+export type PoiType = (typeof PoiTypeValues)[number];
+
+/** Ponto de interesse (PRD §23). */
+export type PointOfInterest = {
+  id: string;
+  mapId: string;
+  name: string;
+  type: PoiType;
+  /** Retângulo que marca o ponto; o que o organizador desenha no mapa. */
+  rect: PoiRect;
+  /** Onde o ícone está dentro do retângulo. */
+  anchor: PoiAnchor;
+  /**
+   * Posição absoluta do ícone, **derivada** pela API de `rect` + `anchor`.
+   *
+   * Continua no tipo porque é o que o marcador e a câmera consomem, e nenhum dos
+   * dois deveria reconstruir a geometria do retângulo para desenhar um pino.
+   */
+  position: Coordinate;
+  description: string | null;
+  accessibilityInfo: string | null;
   createdAt: string;
   updatedAt: string;
 };

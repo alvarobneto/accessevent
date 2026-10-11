@@ -3,6 +3,7 @@ import { useMemo, useState } from 'react';
 import {
   ActivityIndicator,
   Pressable,
+  RefreshControl,
   ScrollView,
   StyleSheet,
   TextInput,
@@ -20,6 +21,7 @@ import { useAsyncData } from '@/hooks/useAsyncData';
 import { useCurrentUser } from '@/hooks/useCurrentUser';
 import { useFavorites } from '@/hooks/useFavorites';
 import { useRefreshOnFocus } from '@/hooks/useRefreshOnFocus';
+import { colors } from '@/theme/tokens';
 import { EVENT_CATEGORY_OPTIONS, eventCategoryIcon } from '@/utils/event-categories';
 import { formatDateRange, formatIsoDate } from '@/utils/format';
 
@@ -214,9 +216,17 @@ export default function ExplorarTab() {
   const { user } = useCurrentUser();
 
   // Dados reais dos eventos cadastrados no backend / repositório
-  const { state: eventsState, reload: reloadEvents } = useAsyncData(() => repository.listEvents());
+  const {
+    state: eventsState,
+    reload: reloadEvents,
+    refreshing: refreshingEvents,
+  } = useAsyncData(() => repository.listEvents());
 
-  const { state: mapsData, reload: reloadMaps } = useAsyncData(async () => {
+  const {
+    state: mapsData,
+    reload: reloadMaps,
+    refreshing: refreshingMaps,
+  } = useAsyncData(async () => {
     const events = await repository.listEvents();
     const mapLists = await Promise.all(
       events.map((e) => repository.listNavigationMaps(e.id).catch(() => [])),
@@ -224,9 +234,9 @@ export default function ExplorarTab() {
     return mapLists.reduce((total, maps) => total + maps.length, 0);
   });
 
-  useRefreshOnFocus(() => {
-    reloadEvents();
-    reloadMaps();
+  useRefreshOnFocus((showIndicator) => {
+    reloadEvents(showIndicator);
+    reloadMaps(showIndicator);
   });
 
   const userName = user?.firstName || 'Visitante';
@@ -286,7 +296,22 @@ export default function ExplorarTab() {
       </View>
 
       {/* ── Conteúdo Rolável ── */}
-      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
+      <ScrollView
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={styles.scrollContent}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshingEvents || refreshingMaps}
+            onRefresh={() => {
+              reloadEvents();
+              reloadMaps();
+            }}
+            tintColor={colors.primary}
+            colors={[colors.primary]}
+            accessibilityLabel="Atualizando eventos"
+          />
+        }
+      >
         {tab === 'explorar' ? (
           <>
             {/* Saudação */}

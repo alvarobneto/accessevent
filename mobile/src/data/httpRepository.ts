@@ -7,7 +7,7 @@ import type {
   NewNavigationMap,
   NewPath,
 } from './repository';
-import type { Event, EventCategoryCount, NavigationMap, Path } from './types';
+import type { Event, EventCategoryCount, NavigationMap, Path, PointOfInterest } from './types';
 
 /**
  * `AppRepository` sobre a API do backend (Sprint 2).
@@ -109,8 +109,39 @@ export function createHttpRepository(): AppRepository {
       return api.patch<Path>(`/paths/${pathId}`, compact(changes));
     },
 
+    async replacePathGeometry(pathId, geometry) {
+      // Só a geometria no corpo: a API recalcula a distância, como na gravação.
+      return api.patch<Path>(`/paths/${pathId}/geometry`, { geometry });
+    },
+
     async deletePath(pathId) {
       await api.delete<void>(`/paths/${pathId}`);
+    },
+
+    async listPois(mapId) {
+      return api.get<PointOfInterest[]>(`/maps/${mapId}/pois`);
+    },
+
+    async createPoi(input) {
+      const { mapId, ...body } = input;
+      return api.post<PointOfInterest>(`/maps/${mapId}/pois`, compact(body as any));
+    },
+
+    async getPoi(poiId) {
+      try {
+        return await api.get<PointOfInterest>(`/pois/${poiId}`);
+      } catch (error) {
+        if (isNotFound(error)) return null;
+        throw error;
+      }
+    },
+
+    async updatePoi(poiId, changes) {
+      return api.patch<PointOfInterest>(`/pois/${poiId}`, compact(changes));
+    },
+
+    async deletePoi(poiId) {
+      await api.delete<void>(`/pois/${poiId}`);
     },
   };
 }

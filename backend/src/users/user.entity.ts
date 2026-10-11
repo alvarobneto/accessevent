@@ -22,8 +22,8 @@ export class UserEntity {
   @Column({ type: 'character varying', length: 100 })
   lastName!: string;
 
-  @Column({ type: 'date' })
-  birthDate!: string;
+  @Column({ type: 'date', nullable: true })
+  birthDate!: string | null;
 
   @Column({ type: 'character varying', length: 255 })
   password!: string;

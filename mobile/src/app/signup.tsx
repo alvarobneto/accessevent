@@ -37,11 +37,7 @@ export default function SignupScreen() {
       setError('Informe o sobrenome.');
       return;
     }
-    if (!birthDate.trim()) {
-      setError('Informe a data de nascimento.');
-      return;
-    }
-    if (!isValidBirthDate(birthDate)) {
+    if (birthDate.trim() && !isValidBirthDate(birthDate)) {
       setError('Informe uma data de nascimento válida (dd-mm-aaaa).');
       return;
     }
@@ -54,8 +50,8 @@ export default function SignupScreen() {
       return;
     }
 
-    const formattedBirthDate = birthDateToISO(birthDate);
-    if (!formattedBirthDate) {
+    const formattedBirthDate = birthDate.trim() ? birthDateToISO(birthDate) : null;
+    if (birthDate.trim() && !formattedBirthDate) {
       setError('Data de nascimento inválida.');
       return;
     }
@@ -67,7 +63,7 @@ export default function SignupScreen() {
         email: email.trim(),
         firstName: firstName.trim(),
         lastName: lastName.trim(),
-        birthDate: formattedBirthDate,
+        ...(formattedBirthDate ? { birthDate: formattedBirthDate } : {}),
         password,
       })
       .then(() => {
@@ -93,15 +89,7 @@ export default function SignupScreen() {
   return (
     <Screen scrollable contentClassName="gap-8 px-6 pb-8 pt-6">
       <View>
-        <Pressable
-          onPress={() => (router.canGoBack() ? router.back() : router.replace('/splash'))}
-          accessibilityRole="button"
-          accessibilityLabel="Voltar"
-          className="h-10 w-10 items-center justify-center rounded-xl bg-gray-100"
-        >
-          <Text variant="heading">‹</Text>
-        </Pressable>
-        <View className="mt-8 h-10 w-10 items-center justify-center rounded-xl bg-primary">
+        <View className="h-10 w-10 items-center justify-center rounded-xl bg-primary">
           <Icon name="user-plus" size={20} color={colors.white} />
         </View>
         <Text variant="caption" className="mt-6">
@@ -131,7 +119,7 @@ export default function SignupScreen() {
         />
         <Input label="Sobrenome" placeholder="Silva" value={lastName} onChangeText={setLastName} />
         <Input
-          label="Data de nascimento"
+          label="Data de nascimento (opcional)"
           placeholder="dd-mm-aaaa"
           value={birthDate}
           onChangeText={(text) => setBirthDate(formatBirthDateInput(text))}
@@ -156,7 +144,7 @@ export default function SignupScreen() {
       </View>
 
       <View className="flex-row items-center justify-center gap-1 pt-2">
-        <Text variant="caption" tint="muted">
+        <Text variant="caption" highContrast>
           Já tem uma conta?
         </Text>
         <Pressable onPress={() => router.replace('/login')} accessibilityLabel="Login" hitSlop={8}>

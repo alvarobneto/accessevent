@@ -226,6 +226,86 @@ describe('PathsService (unit)', () => {
     expect(result.name).toBe('Corredor central');
   });
 
+  it('replaces the geometry and recomputes the distance when adjusting', async () => {
+    findOne.mockResolvedValue(
+      makeRow({
+        geometry: [
+          [0, 0],
+          [0.001, 0],
+          [0.002, 0],
+        ],
+      }),
+    );
+    save.mockImplementation(async (entity) => entity as PathEntity);
+
+    const adjusted: CoordinateTuple[] = [
+      [0, 0],
+      [0.0005, 0.0005],
+      [0.002, 0],
+    ];
+
+    const result = await service.replaceGeometry('path-1', adjusted);
+
+    expect(findOne).toHaveBeenCalledWith({ where: { id: 'path-1' } });
+    expect(save).toHaveBeenCalledWith(
+      expect.objectContaining({
+        geometry: adjusted,
+        distance: expect.any(Number),
+      }),
+    );
+    expect(result.geometry).toEqual(adjusted);
+    expect(result.distance).toBeGreaterThan(222);
+  });
+
+  it('rejects adjustments that add or remove vertices', async () => {
+    findOne.mockResolvedValue(makeRow());
+
+    await expect(
+      service.replaceGeometry('path-1', [
+        [0, 0],
+        [0.0005, 0],
+        [0.001, 0],
+      ]),
+    ).rejects.toMatchObject({
+      status: 400,
+      response: {
+        message: 'O ajuste não pode adicionar ou remover pontos do trajeto.',
+      },
+    });
+
+    expect(save).not.toHaveBeenCalled();
+  });
+
+  it('rejects an adjustment that collapses the trail to zero length', async () => {
+    findOne.mockResolvedValue(makeRow());
+
+    await expect(
+      service.replaceGeometry('path-1', [
+        [1, 1],
+        [1, 1],
+      ]),
+    ).rejects.toMatchObject({
+      status: 400,
+      response: {
+        message: 'O trajeto ajustado tem comprimento zero. Desfaça os ajustes.',
+      },
+    });
+
+    expect(save).not.toHaveBeenCalled();
+  });
+
+  it('throws 404 when adjusting an unknown path', async () => {
+    findOne.mockResolvedValue(null);
+
+    await expect(
+      service.replaceGeometry('missing', TWO_POINTS),
+    ).rejects.toMatchObject({
+      status: 404,
+    });
+
+    expect(save).not.toHaveBeenCalled();
+  });
+
   it('deletes the path it just found', async () => {
     const row = makeRow();
     findOne.mockResolvedValue(row);

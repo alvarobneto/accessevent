@@ -30,7 +30,12 @@ export default function UserMapDetailsScreen() {
           esta própria tela. */}
       <Stack.Screen options={{ title: 'Detalhes do mapa' }} />
 
-      <Screen scrollable testID="user-map-details-screen">
+      <Screen
+        scrollable
+        onRefresh={map.reload}
+        refreshing={map.refreshing}
+        testID="user-map-details-screen"
+      >
         <AsyncContent state={map.state} onRetry={map.reload} loadingLabel="Carregando o mapa…">
           {(data) =>
             data ? (

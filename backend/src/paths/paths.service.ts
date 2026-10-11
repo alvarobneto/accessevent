@@ -10,6 +10,7 @@ import { MapEntity } from '../maps/map.entity.js';
 
 import type { CreatePathDto } from './dto/create-path.dto.js';
 import type { UpdatePathDto } from './dto/update-path.dto.js';
+import type { UpdatePathGeometryDto } from './dto/update-path-geometry.dto.js';
 import { PathEntity } from './path.entity.js';
 import { pathLengthInMeters } from './path-distance.js';
 import { toPathResponse, type PathResponse } from './path.response.js';
@@ -76,6 +77,48 @@ export class PathsService {
     }
 
     path.name = dto.name.trim();
+
+    return toPathResponse(await this.paths.save(path));
+  }
+
+  /**
+   * Substitui a geometria do caminho pelo trajeto ajustado no mapa.
+   *
+   * É o salvamento do ajuste manual (o organizador arrastando pontos e trechos
+   * para corrigir a imprecisão do GPS): a distância é recalculada aqui pela
+   * mesma conta da gravação, porque o cliente nunca envia `distance` — mandar o
+   * valor calculado no app aceitaria dois números para a mesma medida.
+   *
+   * Comprimento zero é a mesma recusa do `create`, com frase própria: o caminho
+   * gravado existia, então "grave de novo" não é o conselho certo para quem está
+   * ajustando — o certo é desfazer o ajuste.
+   *
+   * A quantidade de vértices também é invariável: cada posição na lista identifica
+   * um ponto persistente do rastro, inclusive nas curvas. Ajustar só troca as
+   * coordenadas por índice; não cria, remove ou reordena pontos.
+   */
+  async replaceGeometry(
+    id: string,
+    geometry: UpdatePathGeometryDto['geometry'],
+  ): Promise<PathResponse> {
+    const path = await this.getEntityOrFail(id);
+
+    if (geometry.length !== path.geometry.length) {
+      throw new BadRequestException(
+        'O ajuste não pode adicionar ou remover pontos do trajeto.',
+      );
+    }
+
+    const distance = pathLengthInMeters(geometry);
+
+    if (distance === 0) {
+      throw new BadRequestException(
+        'O trajeto ajustado tem comprimento zero. Desfaça os ajustes.',
+      );
+    }
+
+    path.geometry = geometry;
+    path.distance = distance;
 
     return toPathResponse(await this.paths.save(path));
   }

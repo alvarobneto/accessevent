@@ -377,6 +377,147 @@ describe('/maps/:mapId/paths e /paths/:pathId (e2e)', () => {
     ]);
   });
 
+  it('substitui a geometria ajustada e recalcula a distância', async () => {
+    const created = await request(app.getHttpServer())
+      .post(`/maps/${EXISTING_MAP_ID}/paths`)
+      .send({ geometry: L_TRAIL })
+      .expect(201);
+
+    const adjusted: CoordinateTuple[] = [
+      [0, 0],
+      [0.0005, 0.0001],
+      [0.0005, 0.0005],
+    ];
+
+    const response = await request(app.getHttpServer())
+      .patch(`/paths/${created.body.id}/geometry`)
+      .send({ geometry: adjusted })
+      .expect(200);
+
+    expect(response.body.geometry).toEqual(adjusted);
+    // Só o vértice do meio mudou; a distância é recalculada a partir dos mesmos
+    // três índices, sem simplificar a quina original.
+    expect(response.body.distance).toBeLessThan(111.2);
+
+    const stored = await request(app.getHttpServer())
+      .get(`/paths/${created.body.id}`)
+      .expect(200);
+
+    expect(stored.body.geometry).toEqual(adjusted);
+  });
+
+  it('rejeita ajustes que acrescentam ou removem pontos do rastro', async () => {
+    const created = await request(app.getHttpServer())
+      .post(`/maps/${EXISTING_MAP_ID}/paths`)
+      .send({ geometry: L_TRAIL })
+      .expect(201);
+
+    for (const geometry of [
+      [
+        [0, 0],
+        [0.0005, 0],
+      ],
+      [
+        [0, 0],
+        [0.0005, 0],
+        [0.001, 0],
+        [0.0015, 0],
+      ],
+    ]) {
+      await request(app.getHttpServer())
+        .patch(`/paths/${created.body.id}/geometry`)
+        .send({ geometry })
+        .expect(400)
+        .expect(({ body }) => {
+          expect(body.message).toBe(
+            'O ajuste não pode adicionar ou remover pontos do trajeto.',
+          );
+        });
+    }
+
+    const stored = await request(app.getHttpServer())
+      .get(`/paths/${created.body.id}`)
+      .expect(200);
+
+    expect(stored.body.geometry).toEqual(L_TRAIL);
+  });
+
+  it('rejeita ajuste que deixa o trajeto sem comprimento', async () => {
+    const created = await request(app.getHttpServer())
+      .post(`/maps/${EXISTING_MAP_ID}/paths`)
+      .send({ geometry: L_TRAIL })
+      .expect(201);
+
+    await request(app.getHttpServer())
+      .patch(`/paths/${created.body.id}/geometry`)
+      .send({
+        geometry: [
+          [1, 1],
+          [1, 1],
+          [1, 1],
+        ],
+      })
+      .expect(400)
+      .expect(({ body }) => {
+        expect(body.message).toBe(
+          'O trajeto ajustado tem comprimento zero. Desfaça os ajustes.',
+        );
+      });
+
+    // A geometria original fica intacta: um ajuste recusado não pode apagar o
+    // trajeto que o organizador percorreu.
+    const stored = await request(app.getHttpServer())
+      .get(`/paths/${created.body.id}`)
+      .expect(200);
+
+    expect(stored.body.geometry).toEqual(L_TRAIL);
+    expect(stored.body.distance).toBe(111.2);
+  });
+
+  it('rejeita distância enviada no ajuste de geometria', async () => {
+    const created = await request(app.getHttpServer())
+      .post(`/maps/${EXISTING_MAP_ID}/paths`)
+      .send({ geometry: L_TRAIL })
+      .expect(201);
+
+    await request(app.getHttpServer())
+      .patch(`/paths/${created.body.id}/geometry`)
+      .send({ geometry: L_TRAIL, distance: 1 })
+      .expect(400)
+      .expect(({ body }) => {
+        expect(body.message).toEqual([
+          'O campo "distance" não faz parte deste recurso.',
+        ]);
+      });
+  });
+
+  it('rejeita ajuste com um único ponto', async () => {
+    const created = await request(app.getHttpServer())
+      .post(`/maps/${EXISTING_MAP_ID}/paths`)
+      .send({ geometry: L_TRAIL })
+      .expect(201);
+
+    await request(app.getHttpServer())
+      .patch(`/paths/${created.body.id}/geometry`)
+      .send({ geometry: [[0, 0]] })
+      .expect(400)
+      .expect(({ body }) => {
+        expect(body.message).toEqual([
+          'Um caminho precisa de pelo menos 2 pontos.',
+        ]);
+      });
+  });
+
+  it('devolve 404 ao ajustar geometria de caminho inexistente', async () => {
+    await request(app.getHttpServer())
+      .patch('/paths/00000000-0000-0000-0000-000000000000/geometry')
+      .send({ geometry: L_TRAIL })
+      .expect(404)
+      .expect(({ body }) => {
+        expect(body.message).toBe('Caminho não encontrado.');
+      });
+  });
+
   it('devolve 404 ao apagar caminho inexistente', async () => {
     await request(app.getHttpServer())
       .delete('/paths/00000000-0000-0000-0000-000000000000')

@@ -16,12 +16,12 @@ import { eventCategoryIcon, eventCategoryLabel } from '@/utils/event-categories'
  * volta ao foco, porque um evento novo criado pelo organizador muda a contagem.
  */
 export default function CategoriesScreen() {
-  const { state, reload } = useAsyncData(() => repository.listEventCategories());
+  const { state, reload, refreshing } = useAsyncData(() => repository.listEventCategories());
 
   useRefreshOnFocus(reload);
 
   return (
-    <Screen scrollable testID="categories-screen">
+    <Screen scrollable onRefresh={reload} refreshing={refreshing} testID="categories-screen">
       <AsyncContent
         state={state}
         onRetry={reload}

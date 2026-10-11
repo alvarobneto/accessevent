@@ -6,6 +6,7 @@ import { EventMap } from '@/components/map';
 import { Screen } from '@/components/screen';
 import { Alert, Button, Card, EmptyState, Icon, Text } from '@/components/ui';
 import { repository } from '@/data';
+import { useMapGestureNavigation } from '@/hooks/useMapGestureNavigation';
 import { usePathRecording } from '@/hooks/usePathRecording';
 import { colors } from '@/theme/tokens';
 import type { Coordinate } from '@/types/coordinates';
@@ -33,6 +34,7 @@ const MINIMUM_POINTS = 2;
  */
 export default function RecordPathScreen() {
   const { mapId } = useLocalSearchParams<{ eventId: string; mapId: string }>();
+  const mapGestures = useMapGestureNavigation();
   const recording = usePathRecording();
   const { status, geometry, distanceMeters, elapsedMs, discardedCount, signal, accuracy } =
     recording;
@@ -86,20 +88,24 @@ export default function RecordPathScreen() {
 
   return (
     <>
-      <Stack.Screen options={{ title: 'Mapear novo caminho' }} />
+      <Stack.Screen
+        options={{ ...mapGestures.screenOptions, title: 'Mapear novo caminho' }}
+      />
 
       <Screen contentClassName="flex-1 gap-4 px-5 py-5" testID="record-path-screen">
         {position ? (
-          <EventMap
-            className="flex-1 rounded-lg border border-border"
-            polylines={polylines}
-            userLocation={recording.currentPosition}
-            followUserLocation={isRecording}
-            initialFocus={position}
-            cameraToFollow={cameraCenter ?? position}
-            onCameraSettled={setCameraCenter}
-            accessibilityLabel="Mapa com o caminho em gravação"
-          />
+          <View className="flex-1" {...mapGestures.touchHandlers}>
+            <EventMap
+              className="flex-1 rounded-lg border border-border"
+              polylines={polylines}
+              userLocation={recording.currentPosition}
+              followUserLocation={isRecording}
+              initialFocus={position}
+              cameraToFollow={cameraCenter ?? position}
+              onCameraSettled={setCameraCenter}
+              accessibilityLabel="Mapa com o caminho em gravação"
+            />
+          </View>
         ) : (
           <WaitingForGps />
         )}

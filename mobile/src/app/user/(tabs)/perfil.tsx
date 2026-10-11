@@ -15,7 +15,11 @@ export default function PerfilTab() {
   const { user } = useCurrentUser();
   const { favorites } = useFavorites();
 
-  const { state: routesState, reload: reloadRoutes } = useAsyncData(async () => {
+  const {
+    state: routesState,
+    reload: reloadRoutes,
+    refreshing,
+  } = useAsyncData(async () => {
     const events = await repository.listEvents();
     const mapLists = await Promise.all(
       events.map((e) => repository.listNavigationMaps(e.id).catch(() => [])),
@@ -40,7 +44,12 @@ export default function PerfilTab() {
   }
 
   return (
-    <Screen scrollable contentClassName="gap-6 px-5 pb-8 pt-6">
+    <Screen
+      scrollable
+      onRefresh={reloadRoutes}
+      refreshing={refreshing}
+      contentClassName="gap-6 px-5 pb-8 pt-6"
+    >
       <Card variant="soft">
         <View className="items-center gap-2">
           <View className="h-16 w-16 items-center justify-center rounded-2xl bg-orange-100">

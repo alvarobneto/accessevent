@@ -1,4 +1,5 @@
 import { geometryLengthInMeters } from '@/utils/geo';
+import { anchorToPosition, normalizeRect } from '@/utils/poiAnchor';
 
 import type {
   AppRepository,
@@ -7,7 +8,7 @@ import type {
   NewNavigationMap,
   NewPath,
 } from './repository';
-import type { Event, EventCategoryCount, NavigationMap, Path } from './types';
+import type { Event, EventCategoryCount, NavigationMap, Path, PointOfInterest } from './types';
 
 /**
  * Implementação em memória do `AppRepository`.
@@ -22,6 +23,7 @@ export function createInMemoryRepository(): AppRepository {
   const events: Event[] = [];
   const navigationMaps: NavigationMap[] = [];
   const paths: Path[] = [];
+  const pois: PointOfInterest[] = [];
   let sequence = 0;
 
   const nextId = (prefix: string) => `${prefix}-${++sequence}`;
@@ -161,10 +163,15 @@ export function createInMemoryRepository(): AppRepository {
 
       navigationMaps.splice(index, 1);
 
-      // Os caminhos da navegação somem com ela, como no `ON DELETE CASCADE`.
-      const kept = paths.filter((path) => path.mapId !== mapId);
+      // Os caminhos e os pontos da navegação somem com ela, como no
+      // `ON DELETE CASCADE` do Postgres.
+      const keptPaths = paths.filter((path) => path.mapId !== mapId);
       paths.length = 0;
-      paths.push(...kept);
+      paths.push(...keptPaths);
+
+      const keptPois = pois.filter((poi) => poi.mapId !== mapId);
+      pois.length = 0;
+      pois.push(...keptPois);
     },
 
     async listPaths(mapId) {
@@ -220,6 +227,25 @@ export function createInMemoryRepository(): AppRepository {
       return path;
     },
 
+    async replacePathGeometry(pathId, geometry) {
+      const path = paths.find((item) => item.id === pathId);
+
+      if (!path) {
+        throw new Error('Não foi possível salvar: o caminho não existe mais.');
+      }
+
+      const distance = geometryLengthInMeters(geometry);
+
+      if (distance === 0) {
+        throw new Error('O trajeto ajustado tem comprimento zero. Desfaça os ajustes.');
+      }
+
+      path.geometry = geometry;
+      path.distance = distance;
+      path.updatedAt = now();
+      return path;
+    },
+
     async deletePath(pathId) {
       const index = paths.findIndex((path) => path.id === pathId);
 
@@ -228,6 +254,64 @@ export function createInMemoryRepository(): AppRepository {
       }
 
       paths.splice(index, 1);
+    },
+
+    async listPois(mapId) {
+      return pois
+        .filter((p) => p.mapId === mapId)
+        .sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+    },
+
+    async createPoi(input) {
+      const timestamp = now();
+      const rect = normalizeRect(input.rect);
+      // `position` é derivado, igual na API: a âncora no retângulo manda. Ver
+      // `utils/poiAnchor.ts`.
+      const poi: PointOfInterest = {
+        id: nextId('poi'),
+        mapId: input.mapId,
+        name: input.name.trim(),
+        type: input.type,
+        rect,
+        anchor: input.anchor,
+        position: anchorToPosition(rect, input.anchor),
+        description: clean(input.description),
+        accessibilityInfo: clean(input.accessibilityInfo),
+        createdAt: timestamp,
+        updatedAt: timestamp,
+      };
+      pois.push(poi);
+      return poi;
+    },
+
+    async getPoi(poiId) {
+      return pois.find((p) => p.id === poiId) ?? null;
+    },
+
+    async updatePoi(poiId, changes) {
+      const poi = pois.find((p) => p.id === poiId);
+      if (!poi) {
+        throw new Error('Não foi possível salvar: o ponto não existe mais.');
+      }
+      if (changes.name !== undefined) poi.name = changes.name.trim();
+      if (changes.type !== undefined) poi.type = changes.type;
+      // Retângulo e âncora mudam independentes: redimensionar o quadro reposiciona
+      // o ícone porque a mesma âncora vale no quadro novo.
+      if (changes.rect !== undefined) poi.rect = normalizeRect(changes.rect);
+      if (changes.anchor !== undefined) poi.anchor = changes.anchor;
+      if (changes.rect !== undefined || changes.anchor !== undefined) {
+        poi.position = anchorToPosition(poi.rect, poi.anchor);
+      }
+      if (changes.description !== undefined) poi.description = clean(changes.description);
+      if (changes.accessibilityInfo !== undefined)
+        poi.accessibilityInfo = clean(changes.accessibilityInfo);
+      poi.updatedAt = now();
+      return poi;
+    },
+
+    async deletePoi(poiId) {
+      const idx = pois.findIndex((p) => p.id === poiId);
+      if (idx >= 0) pois.splice(idx, 1);
     },
   };
 }

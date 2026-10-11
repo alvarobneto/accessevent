@@ -1,8 +1,8 @@
 import { useState } from 'react';
-import { View } from 'react-native';
+import { Pressable, View } from 'react-native';
 
 import { Section } from '@/components/section';
-import { Alert, Dialog, Icon, IconButton, ListRow, Text } from '@/components/ui';
+import { Alert, Dialog, Icon, Input, Menu, Text } from '@/components/ui';
 import { repository } from '@/data';
 import type { Path } from '@/data/types';
 import { colors } from '@/theme/tokens';
@@ -26,22 +26,15 @@ type PathListProps = {
  * aconteceu. Caminho sem nome se anuncia pela distância, que é o que a pessoa
  * reconhece — ver `pathLabels`.
  *
- * **A linha abre o editor do caminho, e o botão de apagar é ação à parte.** É a
- * exceção ao combinado de "item de lista abre, menu edita", e ela é deliberada: o
- * hub já é a tela do desenho, e o mapa é a informação que decide qual caminho se
- * quer mexer. Editar pelo menu do cabeçalho obrigaria a abrir o caminho errado
- * primeiro — o menu é do mapa, não da linha — e quem chega da gravação precisa
- * renomear o trajeto que acabou de desenhar sem passar por outra lista.
- *
- * O botão de apagar fica na linha, e não no menu do cabeçalho, pelo mesmo motivo
- * do `DeleteAction`: apagar não se desfaz. A confirmação é o diálogo, que repete o
- * nome e a data para ninguém apagar o trajeto errado. Ele é `trailingAction` e não
- * `trailing` porque um botão dentro da área tocável da linha desaparece para o
- * leitor de tela — ver `ListRow`.
+ * A linha abre o editor do trajeto; o menu do próprio card permite renomear ou
+ * apagar sem sair do mapa. A ação irreversível sempre pede confirmação.
  */
 export function PathList({ paths, onOpen, onChanged }: PathListProps) {
   return (
-    <Section title="Caminhos registrados" description="Toque em um caminho para renomeá-lo.">
+    <Section
+      title="Caminhos registrados"
+      description="Toque em um caminho para editar o trajeto ou abra o menu para renomear e apagar."
+    >
       <View className="gap-3">
         {paths.map((path) => (
           <PathRow key={path.id} path={path} onOpen={() => onOpen(path.id)} onChanged={onChanged} />
@@ -58,59 +51,104 @@ type PathRowProps = {
 };
 
 function PathRow({ path, onOpen, onChanged }: PathRowProps) {
-  const [isOpen, setIsOpen] = useState(false);
-  const [isDeleting, setIsDeleting] = useState(false);
+  const [dialog, setDialog] = useState<'delete' | 'rename' | null>(null);
+  const [pendingAction, setPendingAction] = useState<'delete' | 'rename' | null>(null);
+  const [name, setName] = useState(path.name ?? '');
   const [error, setError] = useState<string | null>(null);
+  const [validationError, setValidationError] = useState<string | null>(null);
 
   const labels = pathLabels(path);
   const recordedAt = formatDateTime(path.createdAt);
 
   const closeDialog = () => {
     // Enquanto o pedido está em voo o diálogo não fecha: sumir no meio da operação
-    // deixaria a pessoa sem saber se o caminho foi apagado.
-    if (isDeleting) return;
-    setIsOpen(false);
+    // deixaria a pessoa sem saber se a alteração foi salva.
+    if (pendingAction) return;
+    setDialog(null);
   };
 
   const confirmDelete = async () => {
-    setIsDeleting(true);
+    setPendingAction('delete');
     setError(null);
 
     try {
       await repository.deletePath(path.id);
-      setIsOpen(false);
-      setIsDeleting(false);
+      setDialog(null);
+      setPendingAction(null);
       onChanged();
     } catch (cause) {
       setError(toErrorMessage(cause, 'Não foi possível apagar o caminho.'));
-      setIsDeleting(false);
+      setPendingAction(null);
     }
+  };
+
+  const confirmRename = async () => {
+    const trimmedName = name.trim();
+
+    if (!trimmedName) {
+      setValidationError('Informe um nome para o caminho.');
+      return;
+    }
+
+    setPendingAction('rename');
+    setError(null);
+    setValidationError(null);
+
+    try {
+      await repository.updatePath(path.id, { name: trimmedName });
+      setDialog(null);
+      setPendingAction(null);
+      onChanged();
+    } catch (cause) {
+      setError(toErrorMessage(cause, 'Não foi possível renomear o caminho.'));
+      setPendingAction(null);
+    }
+  };
+
+  const openDeleteDialog = () => {
+    setError(null);
+    setDialog('delete');
+  };
+
+  const openRenameDialog = () => {
+    setName(path.name ?? '');
+    setError(null);
+    setValidationError(null);
+    setDialog('rename');
   };
 
   return (
     <>
-      <ListRow
-        title={labels.title}
-        description={labels.description}
-        meta={`Gravado em ${recordedAt}`}
-        icon={<Icon name="vector-polyline" size={20} color={colors.gray500} />}
-        onPress={onOpen}
-        accessibilityLabel={`Editar o caminho ${labels.title}, gravado em ${recordedAt}`}
-        trailingAction={
-          <IconButton
-            icon="trash-can-outline"
-            accessibilityLabel={`Apagar o caminho ${labels.title}`}
-            onPress={() => {
-              setError(null);
-              setIsOpen(true);
-            }}
-            disabled={isDeleting}
-          />
-        }
-      />
+      <View className="flex-row items-center gap-2 rounded-lg border border-border bg-background p-2">
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={`Editar o caminho ${labels.title}, gravado em ${recordedAt}`}
+          onPress={onOpen}
+          className="flex-1 flex-row items-center gap-3 rounded-lg p-2 active:opacity-70"
+        >
+          <Icon name="vector-polyline" size={20} color={colors.gray500} />
+          <View className="flex-1 gap-1">
+            <Text variant="subheading" numberOfLines={2}>
+              {labels.title}
+            </Text>
+            <Text variant="caption" numberOfLines={2}>
+              {labels.description}
+            </Text>
+            <Text variant="caption">Gravado em {recordedAt}</Text>
+          </View>
+        </Pressable>
+
+        <Menu
+          accessibilityLabel={`Ações do caminho ${labels.title}`}
+          items={[
+            { id: 'rename', label: 'Renomear', onSelect: openRenameDialog },
+            { id: 'delete', label: 'Apagar', onSelect: openDeleteDialog, destructive: true },
+          ]}
+        />
+      </View>
 
       <Dialog
-        open={isOpen}
+        open={dialog === 'delete'}
         onClose={closeDialog}
         icon="alert-outline"
         destructive
@@ -118,10 +156,38 @@ function PathRow({ path, onOpen, onChanged }: PathRowProps) {
         description={`${labels.title}, gravado em ${recordedAt}. Esta ação não pode ser desfeita.`}
         confirmLabel="Apagar"
         cancelLabel="Cancelar"
-        confirmLoading={isDeleting}
+        confirmLoading={pendingAction === 'delete'}
         onConfirm={() => void confirmDelete()}
       >
         {error ? <Alert tone="error" title="Não foi possível apagar" description={error} /> : null}
+      </Dialog>
+
+      <Dialog
+        open={dialog === 'rename'}
+        onClose={closeDialog}
+        icon="edit-outline"
+        title="Renomear caminho"
+        description="Escolha como este caminho deve aparecer na lista e no mapa."
+        confirmLabel="Salvar nome"
+        cancelLabel="Cancelar"
+        confirmLoading={pendingAction === 'rename'}
+        onConfirm={() => void confirmRename()}
+      >
+        <Input
+          label="Nome do caminho"
+          value={name}
+          onChangeText={(value) => {
+            setName(value);
+            setValidationError(null);
+            setError(null);
+          }}
+          placeholder="Ex.: Entrada até o auditório"
+          autoCapitalize="sentences"
+          maxLength={120}
+          errorText={validationError ?? undefined}
+          testID={`rename-path-${path.id}`}
+        />
+        {error ? <Alert tone="error" title="Não foi possível renomear" description={error} /> : null}
       </Dialog>
     </>
   );
@@ -132,7 +198,8 @@ export function NoPathsHint() {
   return (
     <Section title="Caminhos registrados">
       <Text variant="caption">
-        Nenhum caminho ainda. Grave um com o botão acima: o trajeto aparece desenhado no mapa.
+        Nenhum caminho ainda. Use “Editar a navegação” para gravar um trajeto: ele aparece desenhado
+        no mapa.
       </Text>
     </Section>
   );

@@ -83,15 +83,7 @@ export default function LoginScreen() {
   return (
     <Screen scrollable contentClassName="gap-8 px-6 pb-8 pt-6">
       <View>
-        <Pressable
-          onPress={() => (router.canGoBack() ? router.back() : router.replace('/splash'))}
-          accessibilityRole="button"
-          accessibilityLabel="Voltar"
-          className="h-10 w-10 items-center justify-center rounded-xl bg-gray-100"
-        >
-          <Text variant="heading">‹</Text>
-        </Pressable>
-        <View className="mt-8 h-10 w-10 items-center justify-center rounded-xl bg-primary">
+        <View className="h-10 w-10 items-center justify-center rounded-xl bg-primary">
           <Icon name="wheelchair-accessibility" size={20} color={colors.white} />
         </View>
         <Text variant="caption" className="mt-6">

@@ -361,7 +361,10 @@ ver §30.
 
 # 10. Edição do mapa
 
-Após registrar os caminhos, o organizador pode editar o mapa.
+Após registrar os caminhos, o organizador pode editar o mapa. O hub da navegação
+é de consulta — mostra o desenho e as listas — e o botão **"Editar a navegação"**
+concentra as portas de edição: renomear, ajustar trajeto, gravar caminho novo e
+adicionar ponto.
 
 ## 10.1 Adicionar ponto
 
@@ -386,6 +389,34 @@ Categorias iniciais:
 * Outro.
 
 O organizador posiciona o ponto sobre o mapa.
+
+## 10.2 Ajustar trajeto
+
+O GPS gravado nem sempre sai redondo — o sensor oscila e o trajeto pode sair
+torto. O organizador escolhe um caminho em "Ajustar rota" e o corrige no mapa:
+
+> Ajustar trajeto
+
+* Arrastar um **ponto** move o vértice;
+* Arrastar um **trecho** cria um ponto novo no meio e leva o trecho junto;
+* Quem usa leitor de tela move os mesmos pontos e trechos pelas ações
+  "incrementar"/"decrementar" de cada alvo — não existe gesto que seja a única
+  porta (RNF04).
+
+O trajeto original continua no banco até a pessoa confirmar **"Salvar ajuste"**;
+até lá ele pode descartar as alterações. Geometria de comprimento zero não é
+aceita, e a distância mostrada é recalculada a partir da geometria ajustada.
+
+> **Decisão de equipe:** o ajuste acontece numa tela própria de mapa, com os
+> caminhos vizinhos e os pontos como contexto, e não no editor de nome — corrigir
+> coordenada é trabalho de mapa, e a tela do nome mostra o trajeto como contexto,
+> não como alvo. O hub teria três botões de ação disputando espaço com o desenho;
+> virou consulta, e a edição se concentra atrás de um botão.
+
+> **Decisão de equipe (interação):** a pinça de zoom fica livre durante o ajuste —
+> faixas e alças recusam gestos de dois dedos. E arrastar a linha perto de um
+> vértice move aquele vértice (não só as pontas do trajeto são ajustáveis);
+> arrastar longe dos vértices continua criando um ponto novo no trecho.
 
 ---
 

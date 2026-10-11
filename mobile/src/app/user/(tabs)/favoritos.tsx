@@ -29,7 +29,11 @@ function getEventDisplayDate(startDate: string | null, endDate: string | null): 
 
 export default function FavoritosTab() {
   const { favorites, toggleFavorite } = useFavorites();
-  const { state: eventsState, reload: reloadEvents } = useAsyncData(() => repository.listEvents());
+  const {
+    state: eventsState,
+    reload: reloadEvents,
+    refreshing,
+  } = useAsyncData(() => repository.listEvents());
 
   useRefreshOnFocus(reloadEvents);
 
@@ -39,7 +43,12 @@ export default function FavoritosTab() {
   }, [eventsState, favorites]);
 
   return (
-    <Screen scrollable contentClassName="gap-4 px-5 pb-8 pt-6">
+    <Screen
+      scrollable
+      onRefresh={reloadEvents}
+      refreshing={refreshing}
+      contentClassName="gap-4 px-5 pb-8 pt-6"
+    >
       <Text variant="heading">Favoritos</Text>
 
       {favoritedEvents.length === 0 ? (

@@ -1,6 +1,15 @@
 import type { MapGeometry } from '@/types/map';
+import type { PoiAnchor, PoiRect } from '@/utils/poiAnchor';
 
-import type { Event, EventCategory, EventCategoryCount, NavigationMap, Path } from './types';
+import type {
+  Event,
+  EventCategory,
+  EventCategoryCount,
+  NavigationMap,
+  Path,
+  PointOfInterest,
+  PoiType,
+} from './types';
 
 export type NewEvent = {
   name: string;
@@ -70,6 +79,38 @@ export interface AppRepository {
   getPath(pathId: string): Promise<Path | null>;
   /** `PATCH /paths/:pathId`: renomeia o caminho sem tocar no trajeto. */
   updatePath(pathId: string, changes: PathChanges): Promise<Path>;
+  /**
+   * `PATCH /paths/:pathId/geometry`: substitui o trajeto pelo ajuste manual no
+   * mapa. A distância é recalculada pela API — igual na gravação, o cliente não
+   * manda `distance`.
+   */
+  replacePathGeometry(pathId: string, geometry: MapGeometry): Promise<Path>;
   /** `DELETE /paths/:pathId`: apaga o caminho e tira o trajeto do mapa. */
   deletePath(pathId: string): Promise<void>;
+
+  /** Pontos de interesse da navegação. */
+  listPois(mapId: string): Promise<PointOfInterest[]>;
+  createPoi(input: NewPointOfInterest): Promise<PointOfInterest>;
+  getPoi(poiId: string): Promise<PointOfInterest | null>;
+  updatePoi(poiId: string, changes: PoiChanges): Promise<PointOfInterest>;
+  deletePoi(poiId: string): Promise<void>;
 }
+
+/**
+ * O que o app **grava** de um ponto de interesse.
+ *
+ * Manda `rect` e `anchor`, nunca `position`: a API deriva o ponto absoluto, e
+ * mandar os três deixaria o banco aceitar um `position` que não corresponde ao
+ * retângulo — o estado que ninguém quis. Ver `utils/poiAnchor.ts`.
+ */
+export type NewPointOfInterest = {
+  mapId: string;
+  name: string;
+  type: PoiType;
+  rect: PoiRect;
+  anchor: PoiAnchor;
+  description?: string | null;
+  accessibilityInfo?: string | null;
+};
+
+export type PoiChanges = Partial<NewPointOfInterest>;

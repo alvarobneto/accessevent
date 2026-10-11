@@ -3,17 +3,20 @@ import type { LatLng, Region } from 'react-native-maps';
 import type { Coordinate } from '@/types/coordinates';
 import type { MapGeometry } from '@/types/map';
 
-/**
- * Menor enquadramento com que o mapa sai: 0,002° é cerca de 220 m de latitude,
- * o suficiente para um ponto de interesse não virar o mapa inteiro.
- */
-const MINIMUM_DELTA = 0.002;
+/** Fator compartilhado pelos botões de zoom e pelo zoom inicial padrão. */
+export const ZOOM_FACTOR = 1.6;
 
-/** Folga padrão ao enquadrar o conteúdo, em graus — cerca de 330 m. */
-const GEOMETRY_PADDING = 0.003;
+/** Piso de zoom in, em graus (cerca de 22 m de norte a sul). */
+export const MINIMUM_DELTA = 0.0002;
 
-/** Enquadramento padrão de "você está aqui", em graus — cerca de 550 m. */
-const FOLLOW_DELTA = 0.005;
+/** Zoom inicial: o máximo reduzido em dois toques no botão de zoom out. */
+export const DEFAULT_MAP_DELTA = MINIMUM_DELTA * ZOOM_FACTOR ** 2;
+
+/** Folga ao enquadrar o conteúdo, em graus — a mesma ~22 m do `viewportForBounds`. */
+const GEOMETRY_PADDING = 0.0002;
+
+/** Enquadramento padrão de "você está aqui", igual ao zoom inicial dos mapas. */
+const FOLLOW_DELTA = DEFAULT_MAP_DELTA;
 
 /**
  * Coordenada dentro do globo, em graus decimais.

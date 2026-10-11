@@ -5,10 +5,11 @@ import { Stack, router, useLocalSearchParams } from 'expo-router';
 import { AsyncContent } from '@/components/async-content';
 import { Screen } from '@/components/screen';
 import { Section } from '@/components/section';
-import { Alert, Button, Card, EmptyState, Input, Text } from '@/components/ui';
+import { Alert, Button, Card, EmptyState, Icon, Input, Text } from '@/components/ui';
 import { repository } from '@/data';
 import type { Path } from '@/data/types';
 import { useAsyncData } from '@/hooks/useAsyncData';
+import { colors } from '@/theme/tokens';
 import { toErrorMessage } from '@/utils/errors';
 import { formatDateTime, formatDistance } from '@/utils/format';
 
@@ -22,23 +23,28 @@ import { formatDateTime, formatDistance } from '@/utils/format';
 const NAME_MAX_LENGTH = 120;
 
 /**
- * Editar caminho: dar nome ao trajeto que o organizador percorreu.
+ * Editar caminho: dar nome ao trajeto e abrir o ajuste do trajeto no mapa.
  *
  * É uma tela à parte, e não um campo no hub, porque o hub mostra o mapa inteiro:
  * editar ali empurraria o desenho e a lista de caminhos para baixo a cada tecla.
  * Ela é aberta pela linha da lista ou pelo próprio trajeto no mapa.
  *
- * **Só o nome.** A geometria vem da gravação (Sprint 4) e os atributos de
- * acessibilidade são da Sprint 9; mexer neles aqui seria um editor de vértices que
- * não existe. Por isso a tela mostra o caminho como contexto — distância, pontos e
- * data — e nenhum deles é editável aqui.
+ * **O nome se edita aqui; a geometria se ajusta no mapa.** Os atributos de
+ * acessibilidade são da Sprint 9. O botão "Ajustar trajeto no mapa" leva à tela
+ * de arraste (`/adjust`), que é onde os pontos corrigem o que o GPS gravou torto
+ * — o editor aqui não mexe em coordenada, ele é o contexto (distância, pontos e
+ * data) e a porta para a tela certa.
  *
  * O botão "Salvar alterações" é explícito, e não salvar ao digitar: o nome é do
  * organizador e ele decide quando ele está bom, o mesmo combinado do editor de
  * título da navegação.
  */
 export default function EditPathScreen() {
-  const { pathId } = useLocalSearchParams<{ pathId: string }>();
+  const { eventId, mapId, pathId } = useLocalSearchParams<{
+    eventId: string;
+    mapId: string;
+    pathId: string;
+  }>();
   const id = pathId ?? '';
 
   const path = useAsyncData(() => repository.getPath(id), id);
@@ -49,7 +55,13 @@ export default function EditPathScreen() {
 
       <Screen scrollable testID="edit-path-screen">
         <AsyncContent state={path.state} onRetry={path.reload} loadingLabel="Carregando o caminho…">
-          {(data) => (data ? <PathEditor key={data.id} path={data} /> : <PathNotFound />)}
+          {(data) =>
+            data ? (
+              <PathEditor key={data.id} path={data} eventId={eventId ?? ''} mapId={mapId ?? ''} />
+            ) : (
+              <PathNotFound />
+            )
+          }
         </AsyncContent>
       </Screen>
     </>
@@ -77,9 +89,11 @@ function PathNotFound() {
 
 type PathEditorProps = {
   path: Path;
+  eventId: string;
+  mapId: string;
 };
 
-function PathEditor({ path }: PathEditorProps) {
+function PathEditor({ path, eventId, mapId }: PathEditorProps) {
   const [name, setName] = useState(path.name ?? '');
   const [saving, setSaving] = useState(false);
   const [feedback, setFeedback] = useState<string | null>(null);
@@ -140,7 +154,26 @@ function PathEditor({ path }: PathEditorProps) {
         />
       </Card>
 
-      <Section title="O que este caminho é" description="Gravado por você; aqui só o nome muda.">
+      {eventId && mapId ? (
+        <Button
+          label="Ajustar trajeto no mapa"
+          variant="outline"
+          iconStart={<Icon name="vector-polyline" size={20} color={colors.content} />}
+          onPress={() =>
+            router.push({
+              pathname: '/organizer/event/[eventId]/map/[mapId]/path/[pathId]/adjust',
+              params: { eventId, mapId, pathId: path.id },
+            })
+          }
+          fullWidth
+          testID="adjust-path"
+        />
+      ) : null}
+
+      <Section
+        title="O que este caminho é"
+        description="Gravado por você; aqui você muda o nome, e o trajeto se ajusta no mapa."
+      >
         <Card variant="soft">
           <View className="gap-2">
             <Text variant="body">Distância de {formatDistance(path.distance)}</Text>

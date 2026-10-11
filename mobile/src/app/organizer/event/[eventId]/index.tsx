@@ -26,9 +26,9 @@ export default function ManageEventScreen() {
   const event = useAsyncData(() => repository.getEvent(id), id);
   const maps = useAsyncData(() => repository.listNavigationMaps(id), id);
 
-  useRefreshOnFocus(() => {
-    event.reload();
-    maps.reload();
+  useRefreshOnFocus((showIndicator) => {
+    event.reload(showIndicator);
+    maps.reload(showIndicator);
   });
 
   const eventName = event.state.status === 'success' ? event.state.data?.name : null;
@@ -37,12 +37,21 @@ export default function ManageEventScreen() {
     <>
       <Stack.Screen
         options={{
+          headerShown: true,
           title: eventName ?? 'Evento',
           headerRight: () => <EventMenu eventId={id} eventName={eventName ?? undefined} />,
         }}
       />
 
-      <Screen scrollable testID="manage-event-screen">
+      <Screen
+        scrollable
+        onRefresh={() => {
+          event.reload();
+          maps.reload();
+        }}
+        refreshing={event.refreshing || maps.refreshing}
+        testID="manage-event-screen"
+      >
         <AsyncContent
           state={event.state}
           onRetry={event.reload}

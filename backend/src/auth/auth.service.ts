@@ -15,7 +15,7 @@ export class AuthService {
     email: string,
     firstName: string,
     lastName: string,
-    birthDate: string,
+    birthDate: string | null,
     password: string,
   ): Promise<Omit<UserEntity, 'password'>> {
     return this.usersService.create(

@@ -1,34 +1,14 @@
-import { router } from 'expo-router';
 import { View, Pressable } from 'react-native';
 
 import { Screen } from '@/components/screen';
-import { Text, Icon } from '@/components/ui';
+import { Text, Icon, IconButton } from '@/components/ui';
 import { colors } from '@/theme/tokens';
 
 export default function MapaExemploScreen() {
   return (
     <Screen scrollable={false} contentClassName="flex-1">
-      <View className="flex-row items-center justify-between px-4 py-3">
-        <Pressable
-          onPress={() => router.back()}
-          className="h-10 w-10 items-center justify-center rounded-xl bg-gray-100"
-        >
-          <Text variant="heading">‹</Text>
-        </Pressable>
-        <View>
-          <Text variant="caption" centered>
-            Navegação acessível
-          </Text>
-          <Text variant="label" centered>
-            Festival Cidade Aberta
-          </Text>
-        </View>
-        <Pressable
-          onPress={() => router.push('/user/map/exemplo/details')}
-          className="h-10 w-10 items-center justify-center rounded-xl bg-gray-100"
-        >
-          <Icon name="dots-vertical" size={20} />
-        </Pressable>
+      <View className="px-4 py-3">
+        <Text variant="label">Festival Cidade Aberta</Text>
       </View>
 
       <View className="flex-1 items-center justify-center bg-gray-100">
@@ -48,13 +28,21 @@ export default function MapaExemploScreen() {
         <View className="h-8 w-8 items-center justify-center rounded-full bg-primary">
           <Icon name="map-marker" size={20} color={colors.white} />
         </View>
-        <View className="absolute bottom-4 right-4 gap-2">
-          <View className="h-10 w-10 items-center justify-center rounded-xl bg-white shadow-sm">
-            <Icon name="crosshairs-gps" size={20} />
-          </View>
-          <View className="h-10 w-10 items-center justify-center rounded-xl bg-white shadow-sm">
-            <Icon name="magnify" size={20} />
-          </View>
+        <View className="absolute right-2 top-2 flex-row gap-1 rounded-lg border border-border bg-background p-1 shadow-sm">
+          <IconButton
+            icon="plus"
+            size="sm"
+            accessibilityLabel="Aumentar o mapa"
+            onPress={() => undefined}
+            testID="map-zoom-in"
+          />
+          <IconButton
+            icon="minus"
+            size="sm"
+            accessibilityLabel="Reduzir o mapa"
+            onPress={() => undefined}
+            testID="map-zoom-out"
+          />
         </View>
       </View>
 

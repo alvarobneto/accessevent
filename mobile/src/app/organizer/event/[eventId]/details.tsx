@@ -37,7 +37,12 @@ export default function EventDetailsScreen() {
         }}
       />
 
-      <Screen scrollable testID="event-details-screen">
+      <Screen
+        scrollable
+        onRefresh={event.reload}
+        refreshing={event.refreshing}
+        testID="event-details-screen"
+      >
         <AsyncContent
           state={event.state}
           onRetry={event.reload}

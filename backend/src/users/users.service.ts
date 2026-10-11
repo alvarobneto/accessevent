@@ -19,7 +19,7 @@ export class UsersService {
     email: string,
     firstName: string,
     lastName: string,
-    birthDate: string,
+    birthDate: string | null,
     password: string,
   ): Promise<Omit<UserEntity, 'password'>> {
     const hashedPassword = await bcrypt.hash(password, 10);

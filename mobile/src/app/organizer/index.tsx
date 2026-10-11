@@ -19,12 +19,17 @@ import { colors } from '@/theme/tokens';
  * `dismissTo` do apagado devolviam para a mesma lista com o snapshot antigo.
  */
 export default function OrganizerEventsScreen() {
-  const { state, reload } = useAsyncData(() => repository.listEvents());
+  const { state, reload, refreshing } = useAsyncData(() => repository.listEvents());
 
   useRefreshOnFocus(reload);
 
   return (
-    <Screen scrollable testID="organizer-events-screen">
+    <Screen
+      scrollable
+      onRefresh={reload}
+      refreshing={refreshing}
+      testID="organizer-events-screen"
+    >
       <AsyncContent
         state={state}
         onRetry={reload}

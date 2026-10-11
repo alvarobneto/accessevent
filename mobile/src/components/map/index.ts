@@ -1,1 +1,1 @@
-export { EventMap, type EventMapProps } from './event-map';
+export { EventMap, type EventMapHandle, type EventMapProps } from './event-map';

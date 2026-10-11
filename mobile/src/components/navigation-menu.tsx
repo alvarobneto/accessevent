@@ -5,9 +5,12 @@ import type { MenuMode } from '@/components/event-menu';
 import { Menu } from '@/components/ui';
 
 /**
- * Menu de três pontinhos da navegação. No organizador tem "Ver detalhes" e
- * "Editar navegação"; no participante só "Ver detalhes", pelo mesmo motivo do
- * `EventMenu` — quem consulta não edita.
+ * Menu de três pontinhos da navegação. No organizador e no participante tem
+ * "Ver detalhes" — pelo mesmo motivo do `EventMenu`: quem consulta não edita.
+ *
+ * "Editar navegação" saiu daqui quando o hub ganhou o botão do mesmo nome: o
+ * menu ficaria a um passo de uma tela (a de detalhes) que não tem mais o item,
+ * e ação do dia a dia não é trabalho de menu.
  *
  * `eventId` só é usado no modo organizador, em que a tela de detalhes é
  * aninhada no evento (`/organizer/event/[eventId]/map/[mapId]/details`). No modo
@@ -47,15 +50,6 @@ export function NavigationMenu({
                   ? `/organizer/event/${eventId}/map/${mapId}/details`
                   : `/user/map/${mapId}/details`,
               ),
-          },
-        ]
-      : []),
-    ...(mode === 'organizer'
-      ? [
-          {
-            id: 'edit',
-            label: 'Editar navegação',
-            onSelect: () => router.push(`/organizer/map/${mapId}`),
           },
         ]
       : []),

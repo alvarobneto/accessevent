@@ -6,8 +6,8 @@ import { IsBoundedName } from '../../common/is-bounded-name.js';
  * Corpo do `PATCH /paths/:pathId`.
  *
  * Só o nome, como o `PATCH /maps/:mapId`: o trajeto gravado não é reescrito por
- * aqui. Mexer na geometria é do editor de vértices, e ele precisa de um contrato
- * próprio — aceitar a geometria neste mesmo DTO faria um `PATCH` de nome
+ * aqui. A geometria tem o contrato próprio dela, o `PATCH /paths/:pathId/geometry`
+ * (`UpdatePathGeometryDto`) — aceitá-la neste DTO faria um `PATCH` de nome
  * reescrever o trajeto sem querer.
  *
  * O campo é opcional de propósito, mas `@ValidateIf` em vez de `@IsOptional`:

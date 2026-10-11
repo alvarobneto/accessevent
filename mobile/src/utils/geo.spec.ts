@@ -1,10 +1,12 @@
 import type { Coordinate } from '@/types/coordinates';
 import type { MapGeometry } from '@/types/map';
 import {
+  DEFAULT_MAP_DELTA,
   degreeDistanceInMeters,
   distanceInMeters,
   geometryLengthInMeters,
   isValidCoordinate,
+  regionForCoordinate,
 } from '@/utils/geo';
 
 /** Recife, onde fica o Centro de Convivência Cultural da UFPE. */
@@ -58,6 +60,13 @@ describe('degreeDistanceInMeters', () => {
         },
       ),
     ).toBeCloseTo(distanceInMeters(RECIFE, to), 0);
+  });
+});
+
+describe('regionForCoordinate', () => {
+  it('usa o mesmo zoom inicial padrão que os demais mapas', () => {
+    expect(regionForCoordinate(RECIFE).latitudeDelta).toBe(DEFAULT_MAP_DELTA);
+    expect(regionForCoordinate(RECIFE).longitudeDelta).toBe(DEFAULT_MAP_DELTA);
   });
 });
 

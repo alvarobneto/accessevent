@@ -27,9 +27,9 @@ export default function UserEventScreen() {
   const event = useAsyncData(() => repository.getEvent(id), id);
   const maps = useAsyncData(() => repository.listNavigationMaps(id), id);
 
-  useRefreshOnFocus(() => {
-    event.reload();
-    maps.reload();
+  useRefreshOnFocus((showIndicator) => {
+    event.reload(showIndicator);
+    maps.reload(showIndicator);
   });
 
   const eventName = event.state.status === 'success' ? event.state.data?.name : null;
@@ -45,7 +45,15 @@ export default function UserEventScreen() {
         }}
       />
 
-      <Screen scrollable testID="user-event-screen">
+      <Screen
+        scrollable
+        onRefresh={() => {
+          event.reload();
+          maps.reload();
+        }}
+        refreshing={event.refreshing || maps.refreshing}
+        testID="user-event-screen"
+      >
         <AsyncContent
           state={event.state}
           onRetry={event.reload}

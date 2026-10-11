@@ -38,16 +38,16 @@ export class UsersController {
     if (!body.lastName?.trim()) {
       throw new BadRequestException('Informe o sobrenome.');
     }
-    if (!body.birthDate?.trim()) {
-      throw new BadRequestException('Informe a data de nascimento.');
-    }
     if (!body.password?.trim()) {
       throw new BadRequestException('Informe uma senha.');
     }
 
-    const birthDateObj = new Date(body.birthDate);
-    if (isNaN(birthDateObj.getTime())) {
-      throw new BadRequestException('Data de nascimento inválida.');
+    const birthDate = body.birthDate?.trim() || null;
+    if (birthDate) {
+      const birthDateObj = new Date(birthDate);
+      if (isNaN(birthDateObj.getTime())) {
+        throw new BadRequestException('Data de nascimento inválida.');
+      }
     }
 
     const email = body.email.trim().toLowerCase();
@@ -62,7 +62,7 @@ export class UsersController {
       email,
       body.firstName.trim(),
       body.lastName.trim(),
-      body.birthDate,
+      birthDate,
       body.password,
     );
   }

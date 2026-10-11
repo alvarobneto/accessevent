@@ -1,6 +1,7 @@
 import {
   Accessibility,
   AlertCircle,
+  AlertTriangle,
   ArrowLeft,
   ArrowLeftRight,
   ArrowRight,
@@ -12,6 +13,7 @@ import {
   Calendar,
   CalendarDays,
   Camera,
+  ChartNoAxesColumnIncreasing,
   Check,
   CheckCircle,
   ChevronDown,
@@ -22,14 +24,17 @@ import {
   CircleDot,
   CircleHelp,
   CircleStop,
+  ClipboardPen,
   Clock,
   Cloud,
   Cog,
   Compass,
+  ConciergeBell,
   Crosshair,
   Crown,
   Delete,
   Diamond,
+  DoorOpen,
   Download,
   Droplet,
   Edit,
@@ -53,27 +58,35 @@ import {
   List,
   Lock,
   LogIn,
+  LogOut,
   Mail,
   Map,
   MapPin,
+  MapPinOff,
+  MapPinSearch,
   MapPinned,
+  Maximize2,
   Medal,
   Menu,
   MessageCircle,
   Mic,
   Minus,
+  Minimize2,
   Moon,
   MoreHorizontal,
   Music,
   MoreVertical,
   Mountain,
+  Move,
   Navigation,
   Paperclip,
   Pause,
+  Pencil,
   Phone,
   Play,
   Plus,
   Pentagon,
+  Presentation,
   RefreshCw,
   Repeat,
   Ruler,
@@ -88,19 +101,25 @@ import {
   Snowflake,
   SortAsc,
   Sparkles,
+  Square,
   Star,
+  Stethoscope,
   Sun,
   Tag,
   Target,
   Thermometer,
+  Toilet,
   Trash2,
   Trees,
+  TrendingUp,
   Trophy,
   Umbrella,
+  Undo2,
   UtensilsCrossed,
   Unlock,
   Upload,
   User,
+  UserPlus,
   Users,
   Video,
   Volume2,
@@ -109,12 +128,41 @@ import {
   Zap,
   type LucideIcon,
 } from 'lucide-react-native';
+import type { ComponentProps } from 'react';
+import { MaterialCommunityIcons } from '@expo/vector-icons';
 
 import { colors } from '@/theme/tokens';
+import type { IconName } from '@/types/icon';
 
-const iconMap: Record<string, LucideIcon> = {
+/**
+ * Catálogo de ícones.
+ *
+ * É `Record<IconName, LucideIcon>` e não `Record<string, …>`: a união de
+ * `types/icon.ts` é a fonte da verdade, então um nome usado no app e ausente aqui
+ * quebra o compilador em vez de renderizar `null`. Foi assim que apareceram os
+ * ícones de alerta, de busca no mapa, de mapa indisponível e os de cadastro —
+ * todos invisíveis até aqui.
+ */
+const iconMap: Record<IconName, LucideIcon> = {
   'wheelchair-accessibility': Accessibility,
   'alert-circle-outline': AlertCircle,
+  'alert-outline': AlertTriangle,
+  'bathroom': Toilet,
+  'bathroom-accessible': Accessibility,
+  'concierge-bell': ConciergeBell,
+  'door': DoorOpen,
+  'map-marker-question': CircleHelp,
+  'medical-bag': Stethoscope,
+  'presentation': Presentation,
+  'ramp': TrendingUp,
+  'signup': ClipboardPen,
+  'stairs': ChartNoAxesColumnIncreasing,
+  'user-plus': UserPlus,
+  'map-marker-multiple-outline': MapPinned,
+  'map-marker-off-outline': MapPinOff,
+  'map-search-outline': MapPinSearch,
+  'map-expand-outline': Maximize2,
+  'map-collapse-outline': Minimize2,
   'arrow-left': ArrowLeft,
   'account-switch-outline': ArrowLeftRight,
   'arrow-right': ArrowRight,
@@ -145,6 +193,8 @@ const iconMap: Record<string, LucideIcon> = {
   'download-outline': Download,
   'droplet-outline': Droplet,
   'edit-outline': Edit,
+  entrance: DoorOpen,
+  exit: LogOut,
   'external-link-outline': ExternalLink,
   'eye-outline': Eye,
   'eye-off-outline': EyeOff,
@@ -177,7 +227,7 @@ const iconMap: Record<string, LucideIcon> = {
   elevator: ArrowUp,
   'human-handsup': Accessibility,
   'human-wheelchair': Accessibility,
-  logout: LogIn,
+  logout: LogOut,
   magnify: Search,
   'account-outline': User,
   user: User,
@@ -197,9 +247,11 @@ const iconMap: Record<string, LucideIcon> = {
   'more-horizontal': MoreHorizontal,
   'more-vertical': MoreVertical,
   'mountain-outline': Mountain,
+  move: Move,
   'navigation-outline': Navigation,
   'paperclip-outline': Paperclip,
   'pause-outline': Pause,
+  pencil: Pencil,
   'phone-outline': Phone,
   'play-outline': Play,
   plus: Plus,
@@ -217,6 +269,7 @@ const iconMap: Record<string, LucideIcon> = {
   'skip-forward-outline': SkipForward,
   'snowflake-outline': Snowflake,
   'sort-outline': SortAsc,
+  square: Square,
   'star-four-points': Sparkles,
   'star-outline': Star,
   'sun-outline': Sun,
@@ -227,6 +280,7 @@ const iconMap: Record<string, LucideIcon> = {
   'tree-outline': Trees,
   'trophy-outline': Trophy,
   'umbrella-outline': Umbrella,
+  undo: Undo2,
   'unlock-outline': Unlock,
   'upload-outline': Upload,
   'user-outline': User,
@@ -238,7 +292,22 @@ const iconMap: Record<string, LucideIcon> = {
   'zap-outline': Zap,
 };
 
-type IconName = keyof typeof iconMap;
+type MaterialCommunityIconName = ComponentProps<typeof MaterialCommunityIcons>['name'];
+
+/**
+ * Nomes renderizados pelo Material Community Icons.
+ *
+ * Tem **precedência** sobre o `iconMap`: Entrada, Saída, Escada e Elevador só
+ * existem aqui porque os pictogramas do Lucide para eles eram ambíguos (o de
+ * escada parecia sinal de celular). As entradas correspondentes no `iconMap`
+ * existem apenas para satisfazer o `Record<IconName, …>` e nunca são desenhadas.
+ */
+const materialCommunityIconMap: Partial<Record<IconName, MaterialCommunityIconName>> = {
+  entrance: 'location-enter',
+  exit: 'location-exit',
+  elevator: 'elevator',
+  stairs: 'stairs',
+};
 
 type IconProps = {
   name: IconName;
@@ -263,6 +332,31 @@ export function Icon({
   className,
   accessibilityLabel,
 }: IconProps) {
+  if (name === 'wheelchair-accessibility' || name === 'human-wheelchair') {
+    return (
+      <MaterialCommunityIcons
+        name="wheelchair-accessibility"
+        size={size}
+        color={color}
+        accessibilityLabel={accessibilityLabel}
+        aria-hidden={accessibilityLabel ? undefined : true}
+      />
+    );
+  }
+
+  const materialCommunityName = materialCommunityIconMap[name];
+  if (materialCommunityName) {
+    return (
+      <MaterialCommunityIcons
+        name={materialCommunityName}
+        size={size}
+        color={color}
+        accessibilityLabel={accessibilityLabel}
+        aria-hidden={accessibilityLabel ? undefined : true}
+      />
+    );
+  }
+
   const LucideComponent = iconMap[name];
   if (!LucideComponent) {
     return null;

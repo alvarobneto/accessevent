@@ -64,7 +64,7 @@ src/
 │   └── diagnostics.tsx # Sprint 0 (fora do fluxo, acessado por deep link)
 ├── components/     # camada de UI compartilhada
 │   ├── ui/         # primitivos (Button, Card, Input, DateField, Menu, Alert, Dialog, Text, Icon…)
-│   ├── map/        # EventMap: base do mapa, marcadores e trajetos
+│   ├── map/        # EventMap: mapa, marcadores, trajetos, retângulos de POI e a camada de arraste do trajeto
 │   ├── delete-action.tsx # apagar evento/navegação com confirmação (só organizador)
 │   ├── path-list.tsx # caminhos registrados no hub + apagar por linha (Sprint 5)
 │   ├── screen.tsx    # shell com SafeArea + scroll opcional
@@ -137,13 +137,20 @@ mobile/
 
 ### Decisões de design que fogem do `design.md` (e por quê)
 
-Estas três foram decisões de equipe, então ficam registradas aqui para que a fonte de verdade não
+Estas quatro foram decisões de equipe, então ficam registradas aqui para que a fonte de verdade não
 divirja da implementação:
 
-- **Ícones seguem `@expo/vector-icons`, não Lucide React Native.** O `design.md` sugere Lucide, mas a
-  regra do repositório é preferir a solução oficial do Expo, e `@expo/vector-icons` já é o pacote
-  oficial, instalado e centralizado em `src/components/ui/icon.tsx`. Todos os tamanhos de ícone
-  foram normalizados nos três valores do design: 20, 24 e 32.
+- **Ícones seguem Lucide React Native, com `@expo/vector-icons` como reserva.** A regra do
+  repositório é preferir a solução oficial do Expo, e `@expo/vector-icons` é o pacote oficial —
+  mas o catálogo de `src/components/ui/icon.tsx` foi construído em cima de `lucide-react-native`
+  e é ele que o app usa de fato. Inverter isso agora custaria reescrever 140 entradas já
+  portadas, sem ganho visível. `@expo/vector-icons` fica **instalado como reserva**: quando o
+  Lucide não tiver o ícone desejado, procure nele também antes de inventar um nome. Todo ícone
+  continua entrando por `ui/icon.tsx`, que é `Record<IconName, …>` — é essa fechadura de tipos
+  que impede um nome usado e ausente de renderizar `null` em silêncio. Todos os tamanhos foram
+  normalizados nos três valores do design: 20, 24 e 32. Os símbolos de Entrada/Saída,
+  Escada e Elevador usam o catálogo Material Community Icons via `@expo/vector-icons`, pois seus
+  pictogramas são mais específicos que os equivalentes Lucide disponíveis.
 - **Inter via `@expo-google-fonts/inter`**, com os quatro pesos (`400/500/600/700`) importados por
   subpath a partir de `src/app/_layout.tsx`. O índice do pacote reexporta os 18 arquivos da família e
   o Metro embutiria ~5 MB de fontes que o app nunca carrega; importar por peso mantém só os quatro.
@@ -243,17 +250,21 @@ contrastes está em `src/theme/tokens.js`.
 /organizer/event/[eventId]/details      Detalhes do evento (descrição, período, criado/atualizado em)
 /organizer/event/[eventId]/edit         Editar evento
 /organizer/event/[eventId]/map/new      Criar navegação
-/organizer/event/[eventId]/map/[mapId]  Gerenciar navegação: hub do mapa, caminhos registrados e "Mapear novo caminho"
+/organizer/event/[eventId]/map/[mapId]  Consulta da navegação: desenho + listas + botão "Editar a navegação"
+/organizer/event/[eventId]/map/[mapId]/edit  Editar navegação (card de rename + portas: ponto, caminho, ajuste)
+/organizer/event/[eventId]/map/[mapId]/adjust  Ajustar caminhos diretamente no mapa
 /organizer/event/[eventId]/map/[mapId]/record    Gravar um caminho novo (Sprint 4)
-/organizer/event/[eventId]/map/[mapId]/path/[pathId]  Editar caminho (o nome; Sprint 6)
+/organizer/event/[eventId]/map/[mapId]/path/[pathId]  Editar caminho (nome + porta para o ajuste; Sprint 6)
+/organizer/event/[eventId]/map/[mapId]/path/[pathId]/adjust  Ajustar trajeto no mapa (vértices e trechos)
+/organizer/event/[eventId]/map/[mapId]/poi/new      Criar ponto de interesse (Sprint 7)
+/organizer/event/[eventId]/map/[mapId]/poi/[poiId]  Editar ponto de interesse (Sprint 7)
 /organizer/event/[eventId]/map/[mapId]/details  Detalhes da navegação (criada/atualizada em)
-/organizer/map/[mapId]                  Editar navegação (título; caminhos e pontos nas Sprints 5 a 8)
 /user                    Eventos para consulta
 /user/categories           Categorias com eventos cadastrados e a contagem de cada uma
 /user/categories/[category]  Eventos da categoria
 /user/event/[eventId]      Navegações do evento
 /user/event/[eventId]/details  Detalhes do evento (mesmos dados, sem edição)
-/user/map/[mapId]          Mapa da navegação (o EventMap; caminhos e pontos nas Sprints 5 a 8)
+/user/map/[mapId]          Mapa da navegação (o EventMap com caminhos e pontos salvos)
 /user/map/[mapId]/details  Detalhes do mapa
 /diagnostics             Sprint 0: health do backend + permissão de localização (deep link)
 ```
@@ -284,8 +295,10 @@ falam o idioma do banco (`PointOfInterest.position` e `Path.geometry`, PRD §23)
   `{latitude, longitude}` que o `react-native-maps` consome.
 - `MapGeometry` é a lista de coordenadas em ordem, e é o formato que a API devolve e que o
   `Path.geometry` grava. Não invente um terceiro formato de coordenada para um caso novo.
-- `regionForGeometry` enquadra tudo com 0,003° de folga e piso de 0,002° (≈220 m): um mapa de
-  pavilhão quase sempre tem um único ponto, e sem o piso o mapa abriria no zoom do planeta.
+- `regionForGeometry` enquadra tudo com 0,0002° de folga e piso geométrico de 0,0002°
+  (≈22 m). O zoom inicial visual é o máximo menos dois passos (`0,000512°`, ≈57 m),
+  compartilhado pelo editor e pela câmera de gravação; ao enquadrar conteúdo, esse é o
+  mínimo e a câmera abre mais afastada somente se precisar mostrar a geometria inteira.
   `regionForCoordinate` é a câmera fixa que acompanha quem percorre o local (Sprint 4).
 - `isValidCoordinate` fica na borda do desenho, não espalhado pelas telas: geo do dispositivo,
   resposta da API e trajetória gravada chegam por caminhos diferentes, e coordenada fora da faixa
@@ -374,14 +387,20 @@ botão "Mapear novo caminho"; a gravação vive na rota ao lado.
 
 ## Caminhos no hub (Sprint 5)
 
-`map/[mapId]` é o hub: mostra o mapa com os caminhos já gravados, tem o botão de
-gravar novo e a lista do que existe. A gravação ficou na rota ao lado, então a lista
-não é empurrada para baixo por um painel de GPS.
+`map/[mapId]` é o hub de **consulta**: mostra o mapa com os caminhos já gravados e
+a lista do que existe, e é de onde se sai para editar — o botão
+**"Editar a navegação"** empurra para `/edit`, que tem o rename e as três portas
+(ponto, caminho novo, ajuste de trajeto). A gravação ficou na rota ao lado, então
+a lista não é empurrada para baixo por um painel de GPS.
 
 - **Navegação e caminhos são dois `useAsyncData`**, e não um só com `Promise.all`: a
   lista falhar não pode trocar o mapa da tela por um erro, e o mapa é o conteúdo
   principal do hub. O `useRefreshOnFocus` recarrega os dois, porque quem salva é a
   tela de gravação e a tela não é remontada ao voltar.
+- **O `EventMap` só monta depois que caminhos e pontos terminam de carregar.** O
+  `initialRegion` só vale na montagem; iniciar o mapa com as listas ainda vazias
+  abriria no centro genérico (São Paulo), não no local das coordenadas salvas. Até
+  as duas consultas resolverem, o espaço do mapa mostra o estado de carregamento.
 - **A lista só desenha polilinha com dois pontos válidos.** `polylinesFromPaths`
   (`utils/mapContent.ts`, com teste) decide isso no mesmo lugar do `EventMap`, que
   filtra coordenada inválida na borda do desenho. O `tone` fica no padrão: cor de
@@ -419,7 +438,9 @@ não é empurrada para baixo por um painel de GPS.
   o nome é do organizador e ele decide quando ele está bom. O editor muda **só o
   nome** — geometria vem da gravação (Sprint 4) e acessibilidade é da Sprint 9 — e
   por isso mostra distância, contagem de pontos e data como contexto, que é o que
-  quem chegou por toque no trajeto não tem na frente.
+  quem chegou por toque no trajeto não tem na frente. O botão "Ajustar trajeto no
+  mapa" empurra para `/path/[pathId]/adjust`, que é onde a geometria se mexe; aqui
+  ela é contexto, não alvo.
 - **Excluir caminho continua por linha**, com o `Dialog` destrutivo da Sprint 5.
   O botão de apagar é `trailingAction` do `ListRow`, não `trailing`: `trailing` fica
   **dentro** da área tocável da linha, e um botão dentro do botão da linha
@@ -474,6 +495,51 @@ simulador iOS e quebrava só no Android — o mesmo `EventMap`, a mesma tela.
 - A guarda vale para as duas telas que desenham mapa — `/user/map/[mapId]` e
   `/organizer/event/[eventId]/map/[mapId]` — porque vive no `EventMap`, não na tela.
 
+### Fundo do OpenStreetMap no `EventMap` (decisão de equipe)
+
+O `EventMap` desenha uma camada de tiles do OpenStreetMap por cima da base nativa, com
+`<UrlTile>` (`MapUrlTile`) — o `react-native-maps` 1.27.2 já traz o componente. A decisão veio
+de a equipe preferir o visual do OSM (que o `MapCanvas` do editor já usava), e ela mantém **um
+mapa só** no app em vez de dividir por papel (organizador num mapa, participante em outro):
+
+- **Por que não migrar tudo para o `MapCanvas`.** O `EventMap` entrega de graça localização
+  (`showUserLocation`), câmera que segue a gravação (`cameraToFollow`), toque no mapa e a
+  interação nativa; o `MapCanvas` é um editor SVG e teria que portar tudo isso. Também
+  contrariaria o PRD §24, que fixa `react-native-maps`.
+- **Por que não a divisão por papel.** Dois componentes de mapa para manter, comportamento
+  diferente para a mesma coordenada, e os tiles do OSM cairiam justamente na tela de maior
+  tráfego (o participante).
+- **Fonte única dos tiles.** `OSM_TILE_SERVER`, `OSM_TILE_URL_TEMPLATE` e `OSM_TILE_MAX_ZOOM`
+  vivem em `utils/tiles.ts` e são o que o `<UrlTile>` do `EventMap` e o `MapCanvas` do editor
+  compartilham — o editor monta a URL por tile, o mapa nativo recebe o `{z}/{x}/{y}`. O
+  `EventMap` passa o limite como `maximumNativeZ` (nunca como `maximumZ`, que esconderia o overlay
+  acima do limite): ao aproximar além do zoom 19, o tile OSM de maior resolução é ampliado e
+  continua cobrindo o mapa. Trocar de provedor é trocar esse prefixo em um lugar.
+- **Política do OSM.** O servidor público `tile.openstreetmap.org` **não é para escala**:
+  atende o editor e a visualização no desenvolvimento, mas produção exige um provedor próprio
+  (MapTiler, Stadia, self-host) ou o `UrlTile` passa a violar a política de uso. A atribuição
+  `© colaboradores do OpenStreetMap` é obrigatória e aparece como `Pressable` (link para
+  `openstreetmap.org/copyright`) no canto do `EventMap`, igual ao `MapCanvas`. O
+  `tileCacheMaxAge` acompanha os sete dias que a política pede quando o cliente não lê os
+  headers.
+- **Plataformas.** Os tiles são opacos, então cobrem a base Apple/Google nas duas; no iOS o
+  `shouldReplaceMapContent` também desliga o desenho da base por baixo (o Android ignora a prop,
+  mas a cobertura opaca resolve). A chave do Google Maps no Android continua obrigatória — o
+  `UrlTile` **não** substitui o provedor nativo, só cobre a base. O comportamento da sobreposição
+  difere entre Apple Maps e Google Maps, então **o veredito é em aparelho**.
+- **Zoom e detalhe iguais ao editor de áreas.** Todos os mapas do `EventMap` mostram os
+  botões +/− (os mesmos `IconButton` e `ZOOM_FACTOR` do `MapActions` do editor, com os mesmos
+  limites de 22 m a 5,5 km) no mesmo canto do editor, para a visualização nascer igual à tela de
+  cadastro de ponto de interesse. As telas de visualização passam `fitPadding` menor para o
+  território caber com o mesmo detalhe do `MapCanvas`. O zoom inicial é o máximo menos dois
+  passos (`INITIAL_LATITUDE_DELTA = MIN_LATITUDE_DELTA × ZOOM_FACTOR²`); mapas com conteúdo
+  mantêm todo o desenho visível e só abrem mais afastados quando ele exige. Sem conteúdo, o
+  `EventMap` usa o mesmo `INITIAL_CENTER`/zoom padrão do editor. As telas de edição mantêm o
+  respiro padrão (`DEFAULT_FIT_PADDING`) para as alças não nascerem fora do mapa — mas os botões
+  +/− continuam, pois o pedido é um visual só. A única exceção em que os botões somem
+  é enquanto a câmera **segue o GPS** na gravação: lá o zoom manual não tem efeito, pois o laço
+  de acompanhamento reenquadraria o mapa no instante seguinte.
+
 ### `android.usesCleartextTraffic` no `app.json` não faz nada — use o config plugin
 
 Em desenvolvimento `EXPO_PUBLIC_API_URL` aponta para `http://10.0.2.2:3333` (ou o IP LAN do host),
@@ -503,6 +569,321 @@ O mesmo plugin tem `android.buildArchs`, que sobrescreve `reactNativeArchitectur
 `gradle.properties` de forma que sobrevive ao `prebuild`. Para iteração local use
 `-PreactNativeArchitectures=arm64-v8a` na linha de comando; se virar permanente no `app.json`,
 os APKs de release passam a ser arm64-only e isso precisa ser uma decisão consciente.
+
+## Ajuste manual do trajeto (decisão de equipe)
+
+O GPS entrega o trajeto torto vez ou outra (PRD §10.2), e consertar coordenada é
+trabalho de mapa — por isso o ajuste é uma tela própria de mapa, não um campo do
+editor de nome, e o hub de navegação virou **consulta**: desenho + listas + botão
+**"Editar a navegação"**, que empurra para `/edit` (rename + três portas). De lá,
+**"Ajustar rota"** abre `/adjust` com todos os caminhos no mapa; tocar em qualquer
+trajeto o seleciona para edição, sem sair do mapa. O organizador pode ajustar e
+salvar vários caminhos nessa mesma tela. O editor de nome também tem um botão para
+`/path/[pathId]/adjust`, já com o caminho escolhido.
+
+**Fluxo de gravação — rascunho local, gravação explícita.**
+
+- A tela monta **um** `useAsyncData` com `getPath` + `listPaths(mapId)` +
+  `listPois(mapId)`: mapa, painel e polilinhas de contexto nascem juntos, sem
+  refit do mapa quando o contexto chega atrasado (contexto não zera a câmera; o
+  bump de `cameraTick` do `EventMap` cobre `editable || editablePath`).
+- O estado é `savedGeometry` (números que vieram da API) e `draft` (o que está na
+  tela). Cada gesto compõe `pending.current` de forma síncrona entre `move`s;
+  `draft` acompanha o preview e o commit marca a alteração no fim.
+- **"Salvar ajuste"** chama `replacePathGeometry`; a resposta da API vira
+  `savedGeometry`/`draft` (números do banco), a tela **fica** e mostra `Alert
+tone="success"`. **"Descartar alterações"** só aparece com alterações pendentes
+  e volta ao `savedGeometry`. Sem `useRefreshOnFocus` aqui: recarregar no foco
+  jogaria o rascunho fora.
+
+**A camada de arraste (`components/map/path-edit-overlay.tsx`).**
+
+- Espelha o padrão do `poi-rect-handles.tsx`: `HANDLE_SIZE 44` (desenho 16),
+  `DRAG_THRESHOLD 24`, alvo acessível `accessibilityRole="adjustable"` com
+  increment = afastar/esquerda e decrement = aproximar/direita,
+  `onPanResponderTerminationRequest: () => false`. Um arraste por vez
+  (`dragActive`).
+- **Só vértices existentes são editáveis.** `selectHandleIndices(vertices,
+PATH_HANDLE_SPACING)` decima as alças; a linha e o fundo ficam livres para pan e
+  pinça do mapa. Nenhum gesto ou ação de acessibilidade insere vértices.
+- **As alças acompanham o pan.** `onRegionChange` reprojeta as alças visíveis
+  durante o movimento, agrupando o trabalho por frame; `onRegionChangeComplete`
+  refaz a seleção completa. Durante o arraste de uma alça, a projeção fica
+  congelada para o alvo não sair debaixo do dedo, e o próprio ponto acompanha o
+  gesto via `projectCoordinate`.
+- Quem usa leitor de tela usa `nudgeVertex` (`utils/pathGeometry.ts`, passo de
+  2 m), e o SR chama `onPreview` + `onCommit` juntos (`commitNudge`).
+- `describeContent` usa `${id}:editing` para a polilinha editável, para não
+  disparar o refit do `EventMap` sob o dedo. `pointForCoordinate(c): Promise<Point>`
+  rejeita também **antes do `onMapReady`** (e depois do unmount): o Fabric não
+  encontra a view no registro ("Invalid view returned from registry…"), então os
+  o efeito de projeção completa tem gate de `isReady` e engole a rejeição
+  (`.catch(() => undefined)`) — o próximo `cameraTick`/`isReady` tenta de novo.
+  Sem `try/catch` no corpo.
+- **O array de respondentes do overlay é posicional** (`handles.map`), enquanto
+  `handle.index` é o índice na geometria — esparsa nas alças. Buscar o responder
+  pelo índice geométrico deixa alça sem gesto (ou move o vértice errado).
+- `react-hooks/refs`: o `latest.current` só é atualizado dentro de `useEffect`
+  (nunca durante render, que a regra aceita); os `eslint-disable-next-line
+react-hooks/refs` dos `map`s ficam ancorados na linha do erro, com a justificativa
+  acima — mover o comentário muda a âncora e o lint volta.
+
+**Regras de domínio que o ajuste não pode quebrar.**
+
+- Geometria é `readonly Coordinate[]` puro (`MapGeometry`), sem migração: zero
+  alterações de banco; `PATCH /paths/:pathId/geometry` valida só comprimento zero
+  ("O trajeto ajustado tem comprimento zero. Desfaça os ajustes.").
+- **Ajustar o trajeto não muda acessibilidade.** Os atributos (`hasStairs`,
+  `accessibilityStatus`…) continuam os que o organizador reportou (Sprint 9) e a
+  copy nunca diz que a rota ficou "segura"/"ideal" — PRD §19/§30.
+- Distância exibida vem de `geometryLengthInMeters` + `formatDistance` sobre o
+  rascunho; a do banco é recalculada pela API.
+
+## Pontos de interesse (Sprint 7)
+
+`PointOfInterest` é o nó do grafo do mapa (PRD §8.1): `Path` vai referenciar estes
+pontos como `startNodeId`/`endNodeId` na Sprint 9, e os atributos de acessibilidade
+do ponto ficam para a Sprint 10. O que a Sprint 7 entrega é o cadastro.
+
+- **O que se grava é `rect` + `anchor`, nunca `position`.** A marcação é uma
+  **área** — "é aqui" — e o que o organizador aponta não é uma coordenada, é um
+  trecho de parede, de porta, de balcão. `rect` são dois cantos opostos e `anchor`
+  é a fração `u`/`v` onde o ícone está dentro da caixa; a `position` é **derivada
+  pela API** e existe na resposta, não no banco (`AddPoiRect1730000006000`, com
+  backfill de `anchor` central para o que já estava gravado). Guardar os três
+  deixaria o banco aceitar uma `position` que não corresponde à caixa desenhada —
+  e o banco não tem como recusar isso. `src/utils/poiAnchor.ts` (app) e
+  `backend/src/pois/poi-anchor.ts` (API) são o mesmo cálculo em duas pontas, e
+  ambos têm teste.
+- **A posição se escolhe no mapa — arrastando o ícone ou tocando nele — e nunca
+  digitando latitude e longitude.** Quem monta o mapa conhece o lugar: andou por ele
+  gravando os caminhos. Digitar `lat`/`lng` colocava o ponto em `0,0` quando o campo
+  ficava vazio, e `parseFloat(...) || 0` transformava coordenada digitada errada em
+  `0,0` em silêncio — o ponto nascia no Golfo da Guiné e a API aceitava, porque `0,0`
+  é uma coordenada válida. Sem marcação escolhida o botão de salvar não habilita,
+  então o mapa decide.
+- **Arrastar e tocar são a mesma escolha por três portas, e as três ficam.**
+  Arrastar o ícone da paleta até o lugar é o caminho mais direto, mas não é
+  acessível: leitor de tela não arrasta, e arraste é o gesto mais difícil para quem
+  tem tremor. Então tocar no ícone **seleciona o tipo** e tocar no mapa **coloca o
+  ponto desse tipo**; e, com o ponto já colocado, tocar nele e depois no destino
+  **move** o ponto. As três portas escrevem no mesmo estado. Arraste é atalho,
+  nunca o mecanismo único (RNF04).
+- **A caixa e o ícone andam juntos, porque um ícone fora da caixa é um estado que a
+  interface não consegue explicar.** Arrastar o ícone translada o retângulo inteiro
+  (`dragIconTo`); redimensionar a caixa pelo canto move o ícone **dentro** dela,
+  mantendo a âncora. São gestos opostos na mesma informação, e é a âncora que faz
+  os dois concordarem: ela é a fração que sobrevive ao redimensionamento.
+- **O retângulo é geográfico e as alças são em pixel.** A caixa é um `Polygon` com
+  as quatro pontas de `rectCorners`, e as alças de canto são uma camada de toque
+  por cima, posicionada com `pointForCoordinate` — a única projeção de
+  coordenada para pixel que a biblioteca expõe (`coordinateFromPoint` não existe na
+  1.27.2). Nada disso é gravado: a caixa é a mesma coordenada antes e depois do
+  zoom, e quem reposiciona as alças é o `cameraTick` do `onCameraSettled`.
+- **`resizeRect` faz a conta em bordas, não em cantos.** Num `PoiRect` só dois
+  cantos são guardados e o leste mora em `northEast[1]` enquanto o oeste mora em
+  `southWest[1]` — a mesma aresta nos dois. Escrever o canto arrastado no lugar
+  deixaria a aresta inconsistente e o polígono sairia virado. Por isso a função
+  extrai as quatro bordas, aplica no par que o canto toca e remonta os dois cantos
+  por `normalizeRect`, que é o que garante a ordem canônica por construção.
+- **A alça de canto tem versão sem arraste.** `accessibilityRole="adjustable"` sem
+  `onAccessibilityAction` é um botão morto no leitor de tela: as duas ações são
+  anunciadas e nenhuma faz nada. `increment`/`decrement` chamam
+  `resizeRectByStep`, que escolhe a coordenada e delega para `resizeRect` — o
+  caminho de leitor de tela grava exatamente o que o dedo grava. O passo é
+  `DEFAULT_POI_RECT_SPAN` (≈4,4 m) e não `MIN_POI_RECT_SPAN` (≈2 m) porque um
+  passo de 2 m é fisicamente exato e visualmente invisível.
+- **O `PanResponder` só toma o gesto no `move`, depois de 24px
+  (`DRAG_THRESHOLD`).** Com `onStartShouldSetPanResponder: () => true` o item se
+  tornaria responsável pelo gesto antes do `Pressable` resolver o toque, e o
+  `onPress` de selecionar o tipo nunca chegaria. E
+  `onPanResponderTerminationRequest: () => false` é o que impede o `ScrollView` da
+  tela de roubar o gesto no meio da queda — a paleta está dentro dele.
+- **Um `PanResponder` por tipo.** Com um só para a paleta inteira, o `dx`/`dy` seria
+  relativo ao canto da paleta e o ponto nasceria deslocado do dedo. E o ícone em
+  trânsito é um desenho à parte dentro do próprio item (`pointerEvents="none"`),
+  enquanto o `Pressable` fica onde está: traduzir o gesto em deslocamento relativo
+  ao item evita converter coordenada de tela para coordenada de conteúdo do
+  `ScrollView`.
+- **Por que `PanResponder` e não `react-native-gesture-handler`.** O gesto é um
+  arraste de dois eixos, sem pinça nem múltiplos toques; o gesture-handler aparece
+  aqui só como transitivo do `expo-router`, e usá-lo diretamente pediria um módulo
+  nativo novo, `GestureHandlerRootView` na raiz e plugin de Babel, para um gesto que
+  o `PanResponder` resolve. A animação do ícone que segue o dedo é do Reanimated,
+  que já é dependência pelo NativeWind.
+- **`SharedValue.set()` e não `.value =`** ao escrever valor de gesto. Reanimated
+  expõe os dois e o compilador do React não distingue a semântica: `sv.value = x`
+  dentro de um `useMemo` é lido como mutação durante o render. `set()` é a mesma
+  escrita (`SharedValue.set()` chama o mesmo `valueSetter`) e é uma chamada de
+  método.
+- **O valor do gesto mora em `SharedValue`, não em `useRef`.** O React Native relê os
+  `panHandlers` das props **a cada evento** do gesto, não uma vez no começo: se o
+  `useMemo` recriasse o responder no meio do arraste — e recria, porque `height`
+  muda a cada quadro — o novo responder somaria `dy` sobre a altura que já tinha
+  crescido, e o mapa andaria mais rápido que o dedo.
+- **A conversão de tela para coordenada é de `utils/dropCoordinate.ts`, e é pura
+  para ter teste.** O `react-native-maps` 1.27.2 só expõe `pointForCoordinate`
+  (coordenada → pixel); o inverso, `coordinateFromPoint`, não existe nos tipos nem
+  no código nativo dessa versão (verificado em `dist/src/MapView.d.ts`, `ios/` e
+  `android/`). Sem ele, a conta é a projeção do próprio `Region`: dividir o
+  retângulo em frações e aplicar cada fração ao seu `delta`. Devolve `null` quando
+  não dá para converter — antes de medir, com tamanho zero ou com região
+  degenerada — e o chamador trata como "ainda não dá para soltar".
+- **`EventMapHandle.resolveDrop` é assíncrono e mede na hora da queda.** Medir a
+  origem no `onLayout` pareceria suficiente, mas `onLayout` não dispara quando a
+  **tela** rola: o mapa se desloca na janela sem que o layout interno dele mude, e
+  todo ponto nasceria deslocado pela altura da rolagem — sem erro, a conta fechando
+  com números certos para o lugar errado. `measureInWindow` na queda custa uma
+  medição por arrasto.
+- **O mapa não é redimensionável, e a altura do mapa não é mais uma constante de
+  `utils/`.** Era redimensionável porque escolher o ponto parececia pedir um desenho
+  maior — entrada e banheiro podem estar a poucos metros um do outro. Deixou de
+  ser verdade quando o ponto virou **marcação**: quem escolhe o tamanho da marcação
+  agora arrasta a alça de canto, e o enquadramento é o zoom do próprio mapa. A
+  janela do mapa só mudava o zoom inicial, com dois controles para a mesma coisa,
+  então `MapResizeControls`, `resizable-map.tsx`, as constantes `MAP_*_HEIGHT` e o
+  prop `height` do `EventMap` saíram — `dropCoordinate.ts` ficou só com a conversão
+  de ponto para coordenada, e o mapa do formulário é `h-72` fixo, como as outras
+  telas.
+- **O enquadramento automático usa os quatro cantos do retângulo, não só o ícone.**
+  Quem abre um mapa só com um ponto salvo precisa que a caixa inteira caiba na
+  tela: uma marcação de 8 m que nasce cortada na borda é o desenho do organizador
+  aparecendo pela metade. `describeContent` por outro lado usa o **par** de cantos,
+  porque o número de cantos é sempre quatro e contar não registraria o arraste da
+  alça — que é o que redesenharia o mapa a cada quadro.
+- **O nome do ponto é opcional, e o tipo é o fallback.** Quem não nomeou continua
+  reconhecendo o ponto pelo ícone e pelo tipo. `CreatePoiDto.name` é opcional e o
+  `PoisService` grava `dto.name?.trim() || dto.type` — a coluna segue `NOT NULL`,
+  porque "não tem nome" é ausência de dado e o banco não tem por que carregar essa
+  diferença. `describePoi` não repete o tipo quando o nome é o próprio tipo, para o
+  leitor de tela não vocalizar "Elevador, Elevador".
+- **Descrição e informação de acessibilidade saem da UI desta sprint.** Elas
+  continuam no domínio e na API para a Sprint 10, e o formulário daquela hora vai
+  preencher o que já está no banco. Três campos de texto antes de o ponto existir
+  no mapa fazem o cadastro parecer maior do que é, e o que o organizador sabe
+  sobre acessibilidade é dado dele, não verificado pelo app (PRD §19).
+- **O ícone de cada tipo é uma decisão só, em `utils/poiIcons.ts`.** A paleta e o
+  `MapPin` liam o mesmo catálogo; quando os dois tinham a sua lista, o marcador
+  mostrava um desenho e a paleta outro. `IconName` (`src/types/icon.ts`) é a união
+  que garante que todo ícone usado existe no catálogo de `ui/icon.tsx` — foi uma
+  auditoria desses dois arquivos que achou seis nomes usados e ausentes, que
+  renderizavam `null` em silêncio.
+- **`tracksViewChanges={false}` voltou a ser `true`** no marcador, que agora tem
+  estado (o tipo escolhido no rascunho). Sem isso o Android redesenha o marcador a
+  cada quadro.
+- **O formulário carrega o que já existe na navegação** (outros pontos e caminhos) e
+  passa como `contextMarkers`/`contextPolylines` ao `EventMap`. Entrar numa navegação
+  sem ponto nenhum e tocar no mapa é chute; o contexto é o que faz o toque significar
+  alguma coisa. O ponto em edição é o marcador em `highlight`, e é o único `onPress`:
+  tocar nele não o move, só abre o editor.
+- **Os tipos são os treze da Sprint 7, escolhidos em botões e não em texto livre.**
+  Texto livre com o tipo "de qualquer jeito" só aparecia como erro 400 da API depois
+  de a pessoa preencher o resto do formulário, e o conjunto de tipos é o vocabulário do
+  grafo — o valor gravado precisa ser um dos treze. `PoiTypeValues` vive em
+  `src/data/types.ts`, espelhando o `PoiTypeValues` do `poi.entity.ts` do backend.
+- **O formulário é o `PoiForm`** (`src/components/poi-form.tsx`), compartilhado por
+  "Novo ponto" e "Editar ponto" como o `EventForm` do evento. As duas telas são
+  finas: carregam o contexto e passam `onSubmit`/`onDelete`.
+- **Apagar ponto é por linha, com `Dialog` destrutivo**, como o caminho. O editor
+  também apaga, com o `DeleteAction` — a ação irreversível mora no corpo da tela,
+  nunca no menu do cabeçalho.
+- **`markersFromPois` filtra coordenada inválida** com o mesmo `isValidCoordinate`
+  que `polylinesFromPaths` usa, porque o ponto que não pode ser mostrado também não
+  deve entrar no enquadramento da câmera. O `tone` fica no padrão: a cor de um ponto
+  só muda quando existe um contexto, e pintar o ponto de "verde" para dizer que ele
+  serve seria vender acessibilidade que ninguém verificou (PRD §19).
+- **O toque no mapa tem duas portas e elas não se misturam.** Tocar num marcador ou
+  num trajeto é tocar naquilo — por isso o `onPress` é do marcador e da polilinha, e
+  nunca um callback único no mapa. Tocar no fundo do desenho é o que posiciona ou
+  move um ponto, e chega por `onMapPress` do `EventMap`, que devolve a coordenada
+  já no formato gravado (`Coordinate`), não o `LatLng` do `react-native-maps`.
+
+### Editor protótipo de áreas (a tela de "Mapear novo ponto")
+
+A tela `poi/new.tsx` virou um **protótipo em memória**, a caminho do fluxo de
+mapeamento: o organizador desenha os cômodos e coloca **um item por área**. Nada é
+gravado — o "Salvar" abre um diálogo de sucesso e a Sprint 9 liga o estado do
+`poiEditorReducer` (testado em `src/utils/`) à `PointOfInterest` de verdade. Três
+decisões de equipe divergem do rascunho original e ficam registradas aqui:
+
+- **O desenho é SVG (`react-native-svg`), não o `EventMap`.** O editor precisa de
+  conversão ponto↔coordenada bidirecional para desenhar retângulo/livre, mover área e
+  editar vértice, e a Sprint 7 documentou que `coordinateFromPoint` não existe no
+  `react-native-maps` 1.27.2 — só `pointForCoordinate`. O `EventMap` continua o único
+  importador de `react-native-maps`; o `MapCanvas` de `src/components/poi-editor/`
+  implementa a projeção com `src/utils/mapViewport.ts` (com teste) e desenha com
+  `react-native-svg`, que é a opção do Expo para vetores no React Native.
+- **As ferramentas ficam integradas ao mapa.** A faixa superior do canvas contém
+  controles só de ícone para retângulo, desenho livre, desfazer, câmera e tipos de
+  ponto de interesse. Os rótulos continuam em `accessibilityLabel`/`accessibilityHint`.
+  Um toque com retângulo cria um quadrado inicial de 64px; arrastar define os dois
+  lados, com piso de 20px. Depois de concluir uma forma, o modo de desenho desarma;
+  tocar fora do canvas também o desarma. Dois dedos continuam reservados para pan e
+  zoom mesmo com uma ferramenta selecionada.
+- **A paleta de pontos é só toque (sem arraste).** Selecionar um tipo na faixa do mapa
+  e tocar no canvas coloca o ponto — a terceira porta (arrastar o ícone da paleta) do
+  PoiForm fica para o formulário real da Sprint 9. Tocar de novo no mesmo tipo desarma
+  (`arm-poi` é toggle), e item e ferramenta de desenho não coexistem. Depois de
+  colocado, o marcador pode ser arrastado diretamente, mesmo sem selecioná-lo antes.
+- **Editar um vértice move só aquele vértice.** A geometria mantém a mesma ordem,
+  quantidade e identidade de pontos; nem o ajuste de caminho nem o editor de áreas
+  deforma vizinhos. Redimensionar uma área também não reposiciona automaticamente o
+  ponto de interesse associado.
+- **O marcador selecionado tem uma alça para redimensionar o ícone.** Arrastar a
+  bolinha no anel pontilhado altera `PoiDraft.markerScale`, não a coordenada do ponto
+  nem a geometria da área. A escala fica entre `0.75` e `1.75` para manter o ícone
+  legível sem cobrir o mapa; o mesmo ajuste tem ações acessíveis de aumentar/diminuir.
+- **O `MapCanvas` desenha o contexto da navegação como pano de fundo.** A tela busca
+  caminhos e pontos (`listPaths`/`listPois`, dois `useAsyncData` como no hub) e passa
+  ao canvas pelo prop `context` — as polilinhas dos caminhos e as marcações (`rect`)
+  dos pontos existentes, desenhadas **por cima da imagem do mapa** com o visual do
+  próprio hub: o trajeto é contorno branco + núcleo `primary` (o `tone` padrão), e o
+  retângulo do ponto é o mesmo preenchimento translúcido do `EventMap`. Só o cinza
+  (`gray300`/`gray100`) sumia na fotografia do OSM e o usuário via o mapa "sem a
+  trilha" — o que já está mapeado precisa continuar legível sobre qualquer tile. Os
+  pinos dos pontos existentes (`PoiMarker` não-selecionado) completam o contexto. É
+  o que faz desenhar sobre um local mapeado significar algo: sem isso a tela nova
+  abria um canvas em branco ("o mapa não aparece"). O contexto também **entra no
+  enquadramento**: a câmera cabe na primeira coisa que chega (contexto ou primeiro
+  cômodo) via o mesmo `fitToAreas` do botão Centralizar, e depois nunca mais muda de
+  cabeça — recarregar o contexto no foco não tira o zoom de quem está desenhando.
+- **O fundo do canvas é o mapa de verdade, em tiles do OpenStreetMap.** O editor não
+  usa o `EventMap` (a justificativa do SVG está acima), mas um pavilhão tem endereço e
+  os caminhos gravados carregam coordenada WGS84 — desenhar sobre o lugar exige ver o
+  lugar. `utils/tiles.ts` calcula a grade de Web Mercator que cobre o `MapViewport`
+  (o zoom casa a escala horizontal do canvas com a do Mercator, `256·2^z px = 360°`) e
+  cada tile é posicionado com a **mesma projeção linear** do desenho, pelas coordenadas
+  das próprias bordas: base e rotas alinham no mesmo ponto e tiles vizinhos não têm
+  costura. Os tiles são chaveados por `zoom/x/y` e servidos do cache local por sete
+  dias; solicitações novas levam o `User-Agent` estável `AccessEventMobile/1.0`.
+  Apenas o enquadramento visível é carregado — não há prefetch nem modo offline — e
+  a tela mantém a atribuição clicável `© colaboradores do OpenStreetMap`. A política
+  do servidor público exige identificação, cache e créditos: se o provedor mudar,
+  preservar também as condições e atribuições específicas dele.
+
+O `MapCanvas` é o lugar do desenho: um único `PanResponder` no contêiner (os filhos
+SVG são `pointerEvents="none"`), gesto e commit em duas fases — o desenho do meio do
+gesto vive no `preview` local e o `release` confirma **um** passo do histórico do
+reducer —, pinça com os dois toques de `touches`, e o enquadramento (zoom in/out,
+Centralizar) exposto por `MapCanvasHandle`, o mesmo contrato do `EventMapHandle`.
+Os botões de ferramenta, a paleta de pontos e a câmera são controles de ícone
+posicionados como sobreposição no topo do mapa, não como etapas do formulário.
+
+**Desenhar e navegar não disputam o mesmo gesto.** Com retângulo ou lápis ativo,
+um dedo desenha; dois dedos continuam navegando e ampliando o canvas, cancelando o
+rascunho corrente. Ao completar um desenho a ferramenta volta ao modo neutro; um
+toque fora do retângulo do mapa também desarma a ferramenta (e a seleção da paleta).
+O `PanResponder` do mapa continua dono do gesto e recusa cedê-lo durante a interação.
+
+**As telas com mapa suspendem o gesto de voltar enquanto o mapa está sendo tocado.** O hook
+`useMapGestureNavigation` alterna `gestureEnabled` em `onTouchStart`/`onTouchEnd` no contêiner do
+mapa. Nas telas interativas, mantenha `fullScreenGestureEnabled: false`: no iOS 26 o
+`interactiveContentPopGestureRecognizer` cobre a tela toda e pode começar o pop antes que a tela
+consiga reagir ao primeiro movimento. Com o reconhecedor de tela inteira desligado, o gesto padrão
+de borda continua disponível fora do mapa; durante o toque no mapa, `gestureEnabled` também fica
+desligado. Anexe os handlers ao contêiner que realmente envolve o mapa e mantenha as rotas
+contêiner `organizer`/`user` com o gesto raiz desativado para não sair de toda a seção. A tela de
+mapa de exemplo, que não tem interação de pan, pode manter o gesto de tela inteira habilitado.
 
 ## Data layer
 
@@ -555,6 +936,8 @@ Accessibility data is organizer-reported: never present a route as "safe" or "id
   como plugin em `app.json`.
 - `@expo-google-fonts/inter` — a Inter, fonte definida no `design.md`. Só os pesos `400/500/600/700`
   são importados, por subpath, para não embarcar os 18 arquivos da família no bundle.
+- `expo-file-system` — módulo oficial do Expo usado por `services/mapTileCache.ts` para baixar tiles
+  visíveis com identificação própria e mantê-los no cache local conforme a política de uso do OSM.
 - `@react-native-async-storage/async-storage` — removed. The prototype must not persist anything;
   it comes back in RNF05 behind `src/data/` when recorded paths need to survive app restarts.
 - `react-native-maps` — o mapa do app, o `EventMap` de `src/components/map/`. Já estava instalado
