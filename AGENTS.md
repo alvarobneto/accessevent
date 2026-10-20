@@ -2,7 +2,7 @@
 
 ## Repo state (read first)
 
-This is a **monorepo** with two apps. `PRD.md` = what to build and why. `Sprints.md` = the order to build it. Both are in Brazilian Portuguese and are the source of truth for scope.
+This is a **npm-workspaces monorepo** with two apps. `PRD.md` = what to build and why. `sprints.md` = the order to build it. Both are in Brazilian Portuguese and are the source of truth for scope. The root `README.md` is the newcomer quickstart.
 
 ```text
 accessEvent/
@@ -20,15 +20,29 @@ accessEvent/
 
 ## Commands
 
-There is no root `package.json` — run these inside `mobile/` or `backend/`.
+Install both apps from the root and use the root scripts for common tasks:
 
 ```bash
-# ---- Full stack via Docker (from the repo root) ----
-docker compose up -d --build
-curl http://localhost:3333/health
-
-# ---- Backend (cd backend) ----
+# ---- Install and common checks (from the repo root) ----
 npm install
+npm run lint
+npm run typecheck
+npm test
+npm run check             # lint + typecheck + unit tests
+
+# ---- Local development (from the repo root) ----
+npm run stack:up          # PostgreSQL + migrations + API via Docker
+npm run stack:down
+npm run dev:api           # API with watch mode (with DB running)
+npm run dev:mobile        # Expo / Metro
+npm run dev:ios
+npm run dev:android
+
+# App-specific scripts can also run from the root with --workspace.
+npm run test:e2e
+npm run doctor
+
+# ---- Backend (cd backend, or use --workspace=accessevent-api) ----
 npm run start:dev      # watch mode on :3333
 npm run build          # tsc -> dist/
 npm run start:prod     # node dist/main.js
@@ -39,8 +53,7 @@ npm run test           # vitest unit
 npm run test:e2e       # vitest e2e
 npm run test:cov
 
-# ---- Mobile (cd mobile) ----
-npm install
+# ---- Mobile (cd mobile, or use --workspace=accessevent-mobile) ----
 npm start              # expo start
 npm run ios            # iOS simulator
 npm run android        # Android emulator

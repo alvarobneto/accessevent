@@ -1,0 +1,31 @@
+{
+  "name": "accessevent",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Monorepo do AccessEvent: aplicativo mobile e API.",
+  "engines": {
+    "node": ">=24 <25"
+  },
+  "workspaces": [
+    "backend",
+    "mobile"
+  ],
+  "scripts": {
+    "dev:api": "npm run start:dev --workspace=accessevent-api",
+    "dev:mobile": "npm run start --workspace=accessevent-mobile",
+    "dev:mobile:clear": "npm run start --workspace=accessevent-mobile -- --clear",
+    "dev:ios": "npm run ios --workspace=accessevent-mobile",
+    "dev:android": "npm run android --workspace=accessevent-mobile",
+    "db:up": "docker compose up -d postgres",
+    "db:down": "docker compose stop postgres",
+    "stack:up": "docker compose up -d --build",
+    "stack:down": "docker compose down",
+    "api:build": "npm run build --workspace=accessevent-api",
+    "lint": "npm run lint --workspaces --if-present",
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "test": "npm run test --workspaces --if-present",
+    "test:e2e": "npm run test:e2e --workspace=accessevent-api",
+    "doctor": "npm run doctor --workspace=accessevent-mobile",
+    "check": "npm run lint && npm run typecheck && npm test"
+  }
+}
