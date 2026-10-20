@@ -1,5 +1,6 @@
 import type { Coordinate } from '@/types/coordinates';
 import type { IconName } from '@/types/icon';
+import type { AreaType } from '@/data/types';
 import {
   boundsOfRing,
   pointInBounds,
@@ -54,6 +55,9 @@ export type AreaDraft = {
   id: string;
   kind: AreaKind;
   geometry: AreaRing;
+  name: string;
+  type: AreaType;
+  description: string | null;
   /** O ponto dentro desta área, ou `null` enquanto ela não tem um. */
   poiId: string | null;
 };
@@ -121,6 +125,8 @@ export type PoiEditorAction =
   | { type: 'select-poi'; poiId: string | null }
   | { type: 'commit-move-area'; areaId: string; geometry: AreaRing }
   | { type: 'commit-edit-area'; areaId: string; geometry: AreaRing }
+  | { type: 'update-area-details'; areaId: string; name: string; areaType: AreaType; description: string | null }
+  | { type: 'persist-area-id'; areaId: string; persistedId: string }
   | { type: 'commit-move-poi'; poiId: string; position: Coordinate }
   | { type: 'resize-poi-marker'; poiId: string; scale: number }
   | { type: 'set-interaction'; interaction: EditorInteraction }
@@ -154,9 +160,9 @@ const MAX_HISTORY = 30;
 /** Invariante do desenho: ponto fora das áreas não existe. */
 const ALLOW_POI_OUTSIDE_AREAS = false;
 
-export function createInitialEditorState(): PoiEditorState {
+export function createInitialEditorState(areas: AreaDraft[] = []): PoiEditorState {
   return {
-    areas: [],
+    areas,
     pois: [],
     selectedAreaId: null,
     selectedPoiId: null,
@@ -206,6 +212,12 @@ export function poiEditorReducer(state: PoiEditorState, action: PoiEditorAction)
 
     case 'commit-edit-area':
       return updateAreaGeometry(state, action.areaId, action.geometry);
+
+    case 'update-area-details':
+      return updateAreaDetails(state, action);
+
+    case 'persist-area-id':
+      return persistAreaId(state, action.areaId, action.persistedId);
 
     case 'commit-move-poi':
       return movePoi(state, action.poiId, action.position);
@@ -334,7 +346,15 @@ function swapAreaItem(
 function dropArea(state: PoiEditorState, kind: AreaKind, geometry: AreaRing): PoiEditorState {
   if (geometry.length < 3) return state;
 
-  const area: AreaDraft = { id: createId('area'), kind, geometry, poiId: null };
+  const area: AreaDraft = {
+    id: createId('area'),
+    kind,
+    geometry,
+    name: '',
+    type: 'outro',
+    description: null,
+    poiId: null,
+  };
   const next: PoiEditorState = {
     ...state,
     areas: [...state.areas, area],
@@ -347,6 +367,47 @@ function dropArea(state: PoiEditorState, kind: AreaKind, geometry: AreaRing): Po
   };
 
   return withFeedback(commit(state, next), editorFeedback.areaDrawn);
+}
+
+function updateAreaDetails(
+  state: PoiEditorState,
+  action: Extract<PoiEditorAction, { type: 'update-area-details' }>,
+): PoiEditorState {
+  const area = state.areas.find((candidate) => candidate.id === action.areaId);
+  if (!area) return state;
+  if (
+    area.name === action.name &&
+    area.type === action.areaType &&
+    area.description === action.description
+  ) {
+    return state;
+  }
+
+  const next: PoiEditorState = {
+    ...state,
+    areas: state.areas.map((candidate) =>
+      candidate.id === action.areaId
+        ? { ...candidate, name: action.name, type: action.areaType, description: action.description }
+        : candidate,
+    ),
+  };
+  return commit(state, next);
+}
+
+/** Troca o id temporário pelo id da API em estado atual e histórico de desfazer. */
+function persistAreaId(state: PoiEditorState, areaId: string, persistedId: string): PoiEditorState {
+  const replace = (area: AreaDraft) => (area.id === areaId ? { ...area, id: persistedId } : area);
+  const replaceSnapshot = (snapshot: PoiEditorSnapshot): PoiEditorSnapshot => ({
+    ...snapshot,
+    areas: snapshot.areas.map(replace),
+  });
+
+  return {
+    ...state,
+    areas: state.areas.map(replace),
+    selectedAreaId: state.selectedAreaId === areaId ? persistedId : state.selectedAreaId,
+    history: state.history.map(replaceSnapshot),
+  };
 }
 
 /**

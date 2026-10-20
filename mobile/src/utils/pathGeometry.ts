@@ -1,6 +1,5 @@
 import type { Coordinate } from '@/types/coordinates';
 import type { MapGeometry } from '@/types/map';
-import type { ScreenPoint } from '@/utils/dropCoordinate';
 import { isValidCoordinate } from '@/utils/geo';
 
 /** Um metro em graus de latitude. */
@@ -85,38 +84,140 @@ export function moveVertex(
 }
 
 /**
- * Os índices que viram alça de arraste, dada a posição em pixel de cada vértice.
+ * Move a control vertex and redistribute the samples on its adjacent segments.
  *
- * Um trajeto gravado tem dezenas ou centenas de pontos — um por segundo de
- * caminhada — e desenhar uma alça de 44 px em cada um deles produziria caixas
- * sobrepostas onde nada dá para acertar separado. A regra é simples e é a mesma
- * do trajeto: **sempre o primeiro e o último**, porque são as pontas do trajeto
- * e arrastá-las é como se estende ou se encurta um fim; entre eles, um
- * vértice por `minSpacing` de distância acumulada em pixel.
- *
- * O espaçamento é medido entre alças **mantidas**, não entre vértices
- * consecutivos: num trecho reto a decimação pula muitos pontos de uma vez, e
- * medir contra o vizinho imediato manteria alças juntas demais.
+ * The original geometry keeps its point count (required by the API). Samples
+ * between the neighboring control vertices are interpolated along the updated
+ * segments, so moving a corner can straighten a recorded curve instead of only
+ * moving one GPS sample inside it.
  */
-export function selectHandleIndices(points: readonly ScreenPoint[], minSpacing: number): number[] {
-  if (points.length === 0) return [];
-  if (points.length === 1) return [0];
+export function moveControlPoint(
+  geometry: MapGeometry,
+  controlIndices: readonly number[],
+  index: number,
+  coordinate: Coordinate,
+): MapGeometry {
+  const controlPosition = controlIndices.indexOf(index);
+  if (controlPosition < 0 || !isValidIndex(geometry, index) || !isValidCoordinate(coordinate)) {
+    return geometry;
+  }
 
-  const indices = [0];
-  let last = points[0];
+  const next = geometry.slice();
+  next[index] = coordinate;
+  const previousControlIndex = controlIndices[controlPosition - 1];
+  const followingControlIndex = controlIndices[controlPosition + 1];
 
-  for (let index = 1; index < points.length - 1; index += 1) {
-    const point = points[index];
-    if (Math.hypot(point.x - last.x, point.y - last.y) >= minSpacing) {
-      indices.push(index);
-      last = point;
+  if (previousControlIndex !== undefined) {
+    interpolateSegment(next, previousControlIndex, index);
+  }
+  if (followingControlIndex !== undefined) {
+    interpolateSegment(next, index, followingControlIndex);
+  }
+
+  return next;
+}
+
+/** Distributes interior samples evenly along the segment's endpoint coordinates. */
+function interpolateSegment(geometry: Coordinate[], startIndex: number, endIndex: number): void {
+  const start = geometry[startIndex];
+  const end = geometry[endIndex];
+  if (!start || !end) return;
+
+  const span = endIndex - startIndex;
+  for (let index = startIndex + 1; index < endIndex; index += 1) {
+    const fraction = (index - startIndex) / span;
+    geometry[index] = [
+      start[0] + (end[0] - start[0]) * fraction,
+      start[1] + (end[1] - start[1]) * fraction,
+    ];
+  }
+}
+
+/** Tolerância padrão para descartar ruído e manter as mudanças reais de direção. */
+export const PATH_SIMPLIFICATION_TOLERANCE_M = 1;
+
+/** Distância de um ponto ao segmento de reta entre duas coordenadas. */
+function distanceToSegmentInMeters(point: Coordinate, start: Coordinate, end: Coordinate): number {
+  const segment = vectorInMeters(start, end);
+  const pointVector = vectorInMeters(start, point);
+  const lengthSquared = segment.x * segment.x + segment.y * segment.y;
+
+  if (lengthSquared === 0) return Math.hypot(pointVector.x, pointVector.y);
+
+  const along = Math.max(
+    0,
+    Math.min(1, (pointVector.x * segment.x + pointVector.y * segment.y) / lengthSquared),
+  );
+  const projection = { x: segment.x * along, y: segment.y * along };
+
+  return Math.hypot(pointVector.x - projection.x, pointVector.y - projection.y);
+}
+
+/** Distância mínima em metros entre uma coordenada e qualquer trecho da rota. */
+export function distanceToPathInMeters(point: Coordinate, geometry: MapGeometry): number {
+  if (geometry.length === 0) return Number.POSITIVE_INFINITY;
+  if (geometry.length === 1) {
+    const offset = vectorInMeters(geometry[0]!, point);
+    return Math.hypot(offset.x, offset.y);
+  }
+
+  let minimumDistance = Number.POSITIVE_INFINITY;
+  for (let index = 1; index < geometry.length; index += 1) {
+    const start = geometry[index - 1];
+    const end = geometry[index];
+    if (!start || !end) continue;
+
+    minimumDistance = Math.min(minimumDistance, distanceToSegmentInMeters(point, start, end));
+  }
+
+  return minimumDistance;
+}
+
+/**
+ * Seleciona pontas e vértices de curvas relevantes sem alterar a geometria.
+ *
+ * Ramer-Douglas-Peucker roda em metros, independente do zoom: uma rota reta
+ * recebe duas alças, um V três e um W cinco. Os índices apontam para a geometria
+ * original, que permanece intacta e com a mesma contagem de pontos para a API.
+ */
+export function selectHandleIndices(
+  geometry: MapGeometry,
+  toleranceMeters = PATH_SIMPLIFICATION_TOLERANCE_M,
+): number[] {
+  if (geometry.length === 0) return [];
+  if (geometry.length === 1) return [0];
+  if (geometry.length === 2) return [0, 1];
+
+  const retained = new Set([0, geometry.length - 1]);
+  const segments: [number, number][] = [[0, geometry.length - 1]];
+
+  while (segments.length > 0) {
+    const [startIndex, endIndex] = segments.pop()!;
+    const start = geometry[startIndex];
+    const end = geometry[endIndex];
+    if (!start || !end) continue;
+
+    let farthestIndex = -1;
+    let farthestDistance = toleranceMeters;
+
+    for (let index = startIndex + 1; index < endIndex; index += 1) {
+      const point = geometry[index];
+      if (!point) continue;
+
+      const distance = distanceToSegmentInMeters(point, start, end);
+      if (distance > farthestDistance) {
+        farthestIndex = index;
+        farthestDistance = distance;
+      }
+    }
+
+    if (farthestIndex >= 0) {
+      retained.add(farthestIndex);
+      segments.push([startIndex, farthestIndex], [farthestIndex, endIndex]);
     }
   }
 
-  const lastIndex = points.length - 1;
-  if (indices[indices.length - 1] !== lastIndex) indices.push(lastIndex);
-
-  return indices;
+  return [...retained].sort((left, right) => left - right);
 }
 
 export type PathHandleSelection = {
@@ -128,24 +229,22 @@ export type PathHandleSelection = {
 /**
  * Mantém os índices das alças de um trajeto durante a sessão de edição.
  *
- * A decimação depende da distância visual entre vértices. Recalculá-la depois de
- * mover um ponto pode escolher outro índice numa curva e dar a impressão de que
- * surgiu um vértice novo. A seleção só nasce para outro caminho ou outra
- * quantidade de vértices; mudanças de coordenadas e de câmera preservam a
- * identidade por índice.
+ * Os índices são escolhidos pelas mudanças de direção, mas continuam apontando
+ * para a geometria original. Recalcular depois de mover um ponto faria a alça
+ * sumir quando a rota fica reta; a seleção só nasce para outro caminho ou outra
+ * quantidade de vértices.
  */
 export function retainPathHandleSelection(
   current: PathHandleSelection | null,
   pathId: string,
-  points: readonly ScreenPoint[],
-  minSpacing: number,
+  geometry: MapGeometry,
 ): PathHandleSelection {
-  if (current?.pathId === pathId && current.vertexCount === points.length) return current;
+  if (current?.pathId === pathId && current.vertexCount === geometry.length) return current;
 
   return {
     pathId,
-    vertexCount: points.length,
-    indices: selectHandleIndices(points, minSpacing),
+    vertexCount: geometry.length,
+    indices: selectHandleIndices(geometry),
   };
 }
 
@@ -225,4 +324,21 @@ export function nudgeVertex(
     index,
     offsetInMeters(point, { x: -perpendicular.x * pull, y: -perpendicular.y * pull }),
   );
+}
+
+/** Acessibilidade: move uma alça usando as outras alças como vizinhas de referência. */
+export function nudgeControlPoint(
+  geometry: MapGeometry,
+  controlIndices: readonly number[],
+  index: number,
+  direction: 'out' | 'in',
+): MapGeometry {
+  const controlPosition = controlIndices.indexOf(index);
+  if (controlPosition < 0) return geometry;
+
+  const controlGeometry = controlIndices.map((controlIndex) => geometry[controlIndex]!);
+  const nudgedControls = nudgeVertex(controlGeometry, controlPosition, direction);
+  const coordinate = nudgedControls[controlPosition];
+
+  return coordinate ? moveControlPoint(geometry, controlIndices, index, coordinate) : geometry;
 }

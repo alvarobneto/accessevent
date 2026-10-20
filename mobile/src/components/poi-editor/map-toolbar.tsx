@@ -70,8 +70,8 @@ const TOOLS: readonly {
   {
     tool: 'rectangle',
     icon: 'square',
-    label: 'Cômodo',
-    hint: 'Toque para criar um quadrado ou arraste para desenhar um retângulo.',
+    label: 'Desenhar área',
+    hint: 'Toque para criar uma área retangular ou arraste para definir seu contorno.',
   },
   {
     tool: 'freehand',

@@ -487,23 +487,19 @@ fluxo; áreas com persistência pertencem à Sprint 8.
 
 ### Sprint 8 — Áreas
 
-**Base experimental já implementada, mas não conta como conclusão desta sprint:** os componentes
-`MapCanvas`/`poiEditorReducer` desenham retângulos e formas livres, fecham o anel ao terminar o
-gesto, permitem mover/editar vértices, pan/zoom, desfazer e colocar um tipo de ponto dentro de cada
-área. Tudo vive em estado local. O fluxo `/poi/new` agora é o CRUD persistido da Sprint 7; a base
-experimental de áreas não está ligada a essa tela e ainda precisa de persistência própria.
+Os componentes `MapCanvas`/`poiEditorReducer` desenham retângulos e formas livres, fecham o anel ao
+terminar o gesto, permitem mover/editar vértices, pan/zoom, desfazer e colocar um tipo de ponto
+dentro de cada área. Na Sprint 8 essa base ganhou **fluxo próprio e persistido** em
+`/organizer/event/[eventId]/map/[mapId]/areas`, desligada do CRUD de `PointOfInterest` (que é o
+`/poi/new` da Sprint 7).
 
-Ainda faltam persistência de `Area` (entidade/API/migração), salvar e recarregar, controle de remoção
-de área na interface e campos de nome/tipo de área. O CRUD de `PointOfInterest` já funciona em fluxo
-próprio e não está ligado a esse canvas experimental.
-
-* [ ] Criar modo "Desenhar área".
-* [ ] Adicionar vértices.
-* [ ] Fechar polígono.
-* [ ] Salvar área.
-* [ ] Editar área.
-* [ ] Remover área.
-* [ ] Definir nome e tipo.
+* [x] Criar modo "Desenhar área".
+* [x] Adicionar vértices.
+* [x] Fechar polígono.
+* [x] Salvar área.
+* [x] Editar área.
+* [x] Remover área.
+* [x] Definir nome e tipo.
 
 Exemplos:
 
@@ -512,6 +508,18 @@ Exemplos:
 * Área de exposição;
 * Foyer;
 * Auditório.
+
+**Modelo e API de `Area`.** Entidade `AreaEntity` (`areas`), migração `CreateAreas1730000008000` com
+`geometry` em `jsonb` e FK `ON DELETE CASCADE` para `maps`; endpoints `GET/POST /maps/:mapId/areas`
+e `GET/PATCH/DELETE /areas/:id`. A geometria é um anel aberto validado por `area-geometry.ts`
+(mínimo de três vértices, coordenada na faixa e região não degenerada), com mensagens pt-BR. Os
+tipos são `alimentacao`, `salao`, `exposicao`, `foyer`, `auditorio` e `outro`.
+
+**Estado real da Sprint 8:** entidade, migração, endpoints e CRUD pela interface estão integrados.
+`repository.listAreas/createArea/updateArea/deleteArea` existem nas três implementações (http, memória,
+contrato); o `inMemoryRepository` espelha o cascade do Postgres ao apagar navegação/evento. A tela
+`/areas` desenha, seleciona, nomeia, tipa (RNF04: alvos de toque grandes e seleção anunciada), salva
+e remove, e o `EventMap` desenha as áreas salvas no hub do organizador e no mapa do participante.
 
 ### Ajuste manual do trajeto e edição da navegação (decisão de equipe)
 

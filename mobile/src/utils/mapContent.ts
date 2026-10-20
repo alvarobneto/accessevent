@@ -1,5 +1,5 @@
-import type { Path, PointOfInterest } from '@/data/types';
-import type { MapGeometry, MapPolyline, MapMarker, MapRect } from '@/types/map';
+import type { Area, Path, PointOfInterest } from '@/data/types';
+import type { MapGeometry, MapPolyline, MapMarker, MapRect, MapArea } from '@/types/map';
 import { isValidCoordinate } from '@/utils/geo';
 import type { PoiRect } from '@/utils/poiAnchor';
 import { poiIcon } from '@/utils/poiIcons';
@@ -84,6 +84,19 @@ export function rectsFromPois(pois: readonly PointOfInterest[]): MapRect[] {
   return pois
     .filter((poi) => isValidRect(poi.rect))
     .map((poi) => ({ id: poi.id, rect: poi.rect }));
+}
+
+/** Áreas com pelo menos três coordenadas válidas viram polígonos do mapa. */
+export function polygonsFromAreas(areas: readonly Area[]): MapArea[] {
+  return areas
+    .filter((area) => area.geometry.length >= 3 && area.geometry.every(isValidCoordinate))
+    .map((area) => ({
+      id: area.id,
+      name: area.name,
+      type: area.type,
+      geometry: area.geometry,
+      description: area.description ?? undefined,
+    }));
 }
 
 /** Os quatro cantos do retângulo são desenháveis? */

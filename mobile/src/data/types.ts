@@ -77,6 +77,29 @@ export type Path = {
   updatedAt: string;
 };
 
+export const AreaTypeValues = [
+  'alimentacao',
+  'salao',
+  'exposicao',
+  'foyer',
+  'auditorio',
+  'outro',
+] as const;
+
+export type AreaType = (typeof AreaTypeValues)[number];
+
+/** Região aberta cadastrada pelo organizador (PRD §8.3 e §23). */
+export type Area = {
+  id: string;
+  mapId: string;
+  name: string;
+  type: AreaType;
+  geometry: MapGeometry;
+  description: string | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
 export const PoiTypeValues = [
   'Entrada',
   'Saída',

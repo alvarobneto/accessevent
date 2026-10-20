@@ -17,7 +17,7 @@ const POI_MEANINGS: Record<PoiKind, string> = {
 };
 
 const MAP_TOOLS: readonly { icon: IconName; label: string; meaning: string }[] = [
-  { icon: 'square', label: 'Cômodo', meaning: 'Toque para criar um quadrado ou arraste.' },
+  { icon: 'square', label: 'Desenhar área', meaning: 'Toque para criar um retângulo ou arraste.' },
   { icon: 'pencil', label: 'Desenho livre', meaning: 'Arraste para traçar uma área.' },
   { icon: 'undo', label: 'Desfazer', meaning: 'Reverte a última edição.' },
   { icon: 'plus', label: 'Aumentar', meaning: 'Aproxima o mapa.' },

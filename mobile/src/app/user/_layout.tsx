@@ -11,7 +11,6 @@ export default function UserLayout() {
         ...headerTheme,
         headerBackVisible: false,
         headerLeft: (props) => <HeaderBackButton canGoBack={props.canGoBack} />,
-        headerRight: () => <HeaderActions />,
         headerLargeTitle: false,
         animation: 'slide_from_right',
       }}

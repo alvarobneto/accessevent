@@ -26,18 +26,14 @@ import MapView, {
 } from 'react-native-maps';
 
 import { MapPin } from '@/components/map/map-pin';
-import {
-  PATH_HANDLE_SPACING,
-  PathEditOverlay,
-  type PathHandle,
-} from '@/components/map/path-edit-overlay';
+import { PathEditOverlay, type PathHandle } from '@/components/map/path-edit-overlay';
 import { RectHandleOverlay } from '@/components/map/poi-rect-handles';
 import { EmptyState, IconButton, Text } from '@/components/ui';
 import { hasGoogleMapsAndroidKey } from '@/config/env';
 import { tv } from '@/lib/tv';
 import { colors } from '@/theme/tokens';
 import type { Coordinate, Coordinates } from '@/types/coordinates';
-import type { MapGeometry, MapMarker, MapPolyline, MapRect, MapTone } from '@/types/map';
+import type { MapArea, MapGeometry, MapMarker, MapPolyline, MapRect, MapTone } from '@/types/map';
 import {
   coordinateAtDrop,
   isInsideMap,
@@ -51,6 +47,7 @@ import {
   isValidCoordinate,
   regionForCoordinate,
   regionForGeometry,
+  regionForGeometryInViewport,
   toLatLng,
 } from '@/utils/geo';
 import { OSM_TILE_MAX_ZOOM, OSM_TILE_URL_TEMPLATE, TILE_CACHE_TTL_MS } from '@/utils/tiles';
@@ -97,6 +94,9 @@ const RECT_FILL_COLORS: Record<MapTone, string> = {
  * mantêm este respiro para as alças das bordas não ficarem coladas na margem.
  */
 const DEFAULT_FIT_PADDING = 48;
+
+/** Folga em pixels ao enquadrar a rota tocada, para preencher mais a tela. */
+const SELECTED_PATH_FIT_PADDING = 24;
 
 /**
  * Lista vazia estável para a camada de interação do trajeto, enquanto a
@@ -172,6 +172,8 @@ export type EventMapProps = {
    * zoom da câmera, e o ponto nasceria certo para aparecer errado logo depois.
    */
   rects?: MapRect[];
+  /** Áreas abertas do mapa, armazenadas como anéis geográficos. */
+  areas?: MapArea[];
   /**
    * Coordenada de onde veio o toque no desenho.
    *
@@ -304,6 +306,7 @@ const DrawnMap = forwardRef<EventMapHandle, EventMapProps>(function DrawnMap(
     markers = [],
     polylines = [],
     rects = [],
+    areas = [],
     onMapPress,
     userLocation,
     followUserLocation = false,
@@ -349,10 +352,16 @@ const DrawnMap = forwardRef<EventMapHandle, EventMapProps>(function DrawnMap(
    * automático tem que caber a **caixa** desenhada, não só o ícone. Sem eles, o
    * mapa abriria no ponto e a marcação nasceria cortada na borda.
    */
-  const content = useRef<{ markers: MapMarker[]; polylines: MapPolyline[]; rects: MapRect[] }>({
+  const content = useRef<{
+    markers: MapMarker[];
+    polylines: MapPolyline[];
+    rects: MapRect[];
+    areas: MapArea[];
+  }>({
     markers,
     polylines,
     rects,
+    areas,
   });
 
   /** Último centro reportado pela câmera, para a tolerância do laço de animação. */
@@ -389,7 +398,8 @@ const DrawnMap = forwardRef<EventMapHandle, EventMapProps>(function DrawnMap(
   const [pathHandles, setPathHandles] = useState<{ pathId: string; handles: PathHandle[] } | null>(
     null,
   );
-  const pathHandleSelection = useRef<PathHandleSelection | null>(null);
+  const pathHandleSelections = useRef(new Map<string, PathHandleSelection>());
+  const lastCameraFocusedPathId = useRef<string | null>(null);
   const pathProjectionFrame = useRef<number | null>(null);
   const pathProjectionSequence = useRef(0);
 
@@ -413,10 +423,10 @@ const DrawnMap = forwardRef<EventMapHandle, EventMapProps>(function DrawnMap(
   );
 
   useEffect(() => {
-    content.current = { markers, polylines, rects };
+    content.current = { markers, polylines, rects, areas };
   });
 
-  const contentKey = describeContent(markers, polylines, rects);
+  const contentKey = describeContent(markers, polylines, rects, areas);
   const isCameraDriven = followUserLocation && cameraToFollow !== null;
   const initialFocusLatitude = initialFocus?.[0] ?? null;
   const initialFocusLongitude = initialFocus?.[1] ?? null;
@@ -433,7 +443,7 @@ const DrawnMap = forwardRef<EventMapHandle, EventMapProps>(function DrawnMap(
   const initialRegion = useMemo(() => {
     if (initialFocus) return regionForCoordinate(initialFocus);
 
-    const geometryRegion = regionForGeometry(contentCoordinates(markers, polylines, rects));
+    const geometryRegion = regionForGeometry(contentCoordinates(markers, polylines, rects, areas));
     if (geometryRegion) {
       return {
         ...geometryRegion,
@@ -448,7 +458,7 @@ const DrawnMap = forwardRef<EventMapHandle, EventMapProps>(function DrawnMap(
       latitudeDelta: INITIAL_LATITUDE_DELTA,
       longitudeDelta: INITIAL_LATITUDE_DELTA,
     };
-  }, [initialFocus, markers, polylines, rects]);
+  }, [initialFocus, markers, polylines, rects, areas]);
 
   // A região nasce do `initialRegion` e não zerada. `onRegionChangeComplete` só
   // dispara quando a câmera _muda_, e num mapa que abre enquadrado e fica parado
@@ -513,12 +523,59 @@ const DrawnMap = forwardRef<EventMapHandle, EventMapProps>(function DrawnMap(
     const map = mapRef.current;
     if (!isReady || !hasLayout || !map || isCameraDriven) return;
 
-    const coordinates = validCoordinates(
-      contentCoordinates(content.current.markers, content.current.polylines, content.current.rects),
-    );
-
     const { width, height } = size.current;
     const aspect = width / height;
+    const availableWidth = Math.max(width - fitPadding * 2, 1);
+    const availableHeight = Math.max(height - fitPadding * 2, 1);
+    const selectedPath = content.current.polylines.find(
+      (polyline) => polyline.editable && polyline.onPreview && polyline.onCommit,
+    );
+
+    if (selectedPath) {
+      lastCameraFocusedPathId.current = selectedPath.id;
+      const coordinates = validCoordinates(selectedPath.geometry);
+      const focusRegion = regionForGeometryInViewport(
+        coordinates,
+        width,
+        height,
+        SELECTED_PATH_FIT_PADDING,
+      );
+      if (!focusRegion) return;
+
+      const { latitudeDelta } = focusRegion;
+      const currentRegion = visibleRegion.current;
+
+      // Ao selecionar um trajeto, centraliza a câmera nele. Se o mapa estiver
+      // afastado demais para enquadrá-lo, aproxima; se já estiver mais próximo,
+      // preserva o zoom manual atual.
+      const targetRegion =
+        currentRegion && currentRegion.latitudeDelta <= latitudeDelta * 1.01
+          ? {
+              ...focusRegion,
+              latitudeDelta: currentRegion.latitudeDelta,
+              longitudeDelta: currentRegion.longitudeDelta,
+            }
+          : focusRegion;
+      map.animateToRegion(targetRegion, CAMERA_DURATION);
+      return;
+    }
+
+    // Desmarcar uma rota é uma ação de seleção, não uma mudança de conteúdo:
+    // mantenha a câmera no lugar em vez de reenquadrar todas as rotas.
+    if (lastCameraFocusedPathId.current !== null) {
+      lastCameraFocusedPathId.current = null;
+      return;
+    }
+
+    const coordinates = validCoordinates(
+      contentCoordinates(
+        content.current.markers,
+        content.current.polylines,
+        content.current.rects,
+        content.current.areas,
+      ),
+    );
+
     if (coordinates.length === 0) {
       const center = {
         latitude: initialFocusLatitude ?? INITIAL_CENTER[0],
@@ -543,8 +600,6 @@ const DrawnMap = forwardRef<EventMapHandle, EventMapProps>(function DrawnMap(
     const geometryRegion = regionForGeometry(coordinates);
     if (!geometryRegion) return;
 
-    const availableWidth = Math.max(width - fitPadding * 2, 1);
-    const availableHeight = Math.max(height - fitPadding * 2, 1);
     const latitudeDelta = Math.max(
       INITIAL_LATITUDE_DELTA,
       (geometryRegion.latitudeDelta * height) / availableHeight,
@@ -608,6 +663,21 @@ const DrawnMap = forwardRef<EventMapHandle, EventMapProps>(function DrawnMap(
       const center: Coordinate = [region.latitude, region.longitude];
       const previous = lastSettledCamera.current;
 
+      // As alças dependem da projeção em pixels, não do centro da câmera. Zoom
+      // e redimensionamento podem mudar essa projeção sem deslocar o centro, por
+      // isso a atualização não pode ficar depois do retorno por tolerância.
+      pathProjectionSequence.current += 1;
+      if (pathProjectionFrame.current !== null) {
+        cancelAnimationFrame(pathProjectionFrame.current);
+        pathProjectionFrame.current = null;
+      }
+      rectProjectionSequence.current += 1;
+      if (rectProjectionFrame.current !== null) {
+        cancelAnimationFrame(rectProjectionFrame.current);
+        rectProjectionFrame.current = null;
+      }
+      if (editable || editablePath) setCameraTick((tick) => tick + 1);
+
       // Um metro de tolerância: a animação de 250 ms nunca assenta exatamente no
       // mesmo centro, e realimentar o efeito a cada quadro seria um laço de
       // animações que não termina.
@@ -620,25 +690,6 @@ const DrawnMap = forwardRef<EventMapHandle, EventMapProps>(function DrawnMap(
 
       lastSettledCamera.current = center;
       onCameraSettled?.(center);
-
-      // Invalida projeções intermediárias: as projeções completas abaixo usam a
-      // região final e recalculam as alças do retângulo e os vértices do trajeto.
-      pathProjectionSequence.current += 1;
-      if (pathProjectionFrame.current !== null) {
-        cancelAnimationFrame(pathProjectionFrame.current);
-        pathProjectionFrame.current = null;
-      }
-      rectProjectionSequence.current += 1;
-      if (rectProjectionFrame.current !== null) {
-        cancelAnimationFrame(rectProjectionFrame.current);
-        rectProjectionFrame.current = null;
-      }
-
-      // Só quando há o que reposicionar em pixel — alça de retângulo ou alças de
-      // trajeto. Nas telas de consulta a câmera anda o tempo todo e este estado
-      // mudaria sem nada que dependa dele. O aviso não depende de existir
-      // `onCameraSettled`: quem assiste a câmera é a projeção, não o laço do GPS.
-      if (editable || editablePath) setCameraTick((tick) => tick + 1);
     },
     [editable, editablePath, onCameraSettled],
   );
@@ -762,8 +813,11 @@ const DrawnMap = forwardRef<EventMapHandle, EventMapProps>(function DrawnMap(
   const handleLayout = useCallback((event: LayoutChangeEvent) => {
     const { width, height } = event.nativeEvent.layout;
     if (width <= 0 || height <= 0) return;
+
+    const didResize = size.current.width !== width || size.current.height !== height;
     size.current = { width, height };
     setHasLayout(true);
+    if (didResize) setCameraTick((tick) => tick + 1);
   }, []);
 
   /**
@@ -920,9 +974,8 @@ const DrawnMap = forwardRef<EventMapHandle, EventMapProps>(function DrawnMap(
   );
 
   /**
-   * Projeção dos alvos dos vértices editáveis: um subconjunto de alças (a
-   * decimação é de `selectHandleIndices`, com o espaçamento
-   * que a camada de interação exporta).
+   * Projeção das alças que representam as pontas e mudanças relevantes de direção.
+   * Os índices continuam apontando para a geometria completa da rota.
    *
    * A geometria do trajeto editável entra aqui como as alças do retângulo entram
    * no efeito delas: o desenho é geográfico, e só a camada de toque precisa de
@@ -944,17 +997,18 @@ const DrawnMap = forwardRef<EventMapHandle, EventMapProps>(function DrawnMap(
     let active = true;
 
     void (async () => {
-      const cachedSelection = pathHandleSelection.current;
+      const cachedSelection = pathHandleSelections.current.get(editablePath.id) ?? null;
       const retainedSelection =
         cachedSelection?.pathId === editablePath.id &&
         cachedSelection.vertexCount === editablePath.geometry.length
           ? cachedSelection
           : null;
-      const indicesToProject = retainedSelection
-        ? retainedSelection.indices
-        : editablePath.geometry.map((_coordinate, index) => index);
+      const selection =
+        retainedSelection ??
+        retainPathHandleSelection(cachedSelection, editablePath.id, editablePath.geometry);
+      pathHandleSelections.current.set(editablePath.id, selection);
       const projected = await Promise.all(
-        indicesToProject.map((index) =>
+        selection.indices.map((index) =>
           map.pointForCoordinate(toLatLng(editablePath.geometry[index]!)),
         ),
       );
@@ -962,20 +1016,9 @@ const DrawnMap = forwardRef<EventMapHandle, EventMapProps>(function DrawnMap(
       if (!active) return;
       if (projected.some((point) => point === null)) return;
 
-      const vertices = projected as ScreenPoint[];
-      const selection = retainedSelection
-        ? retainedSelection
-        : retainPathHandleSelection(
-            cachedSelection,
-            editablePath.id,
-            vertices,
-            PATH_HANDLE_SPACING,
-          );
-      pathHandleSelection.current = selection;
-
       const handles = selection.indices.map((index, position) => ({
         index,
-        point: vertices[retainedSelection ? position : index]!,
+        point: projected[position]!,
       }));
 
       setPathHandles({ pathId: editablePath.id, handles });
@@ -1000,9 +1043,9 @@ const DrawnMap = forwardRef<EventMapHandle, EventMapProps>(function DrawnMap(
         onMapReady={() => setIsReady(true)}
         onRegionChange={handleRegionChange}
         onRegionChangeComplete={handleRegionChangeComplete}
-        // Reposicionamento é um modo exclusivo: enquanto há um trajeto editável,
-        // toques no fundo não devem executar callbacks de criação/posicionamento.
-        onPress={onMapPress === undefined || editablePath ? undefined : handleMapPress}
+        // O callback do fundo também permite desmarcar a rota editável. A alça
+        // tem sua própria camada e `handleMapPress` ignora toques durante arraste.
+        onPress={onMapPress === undefined ? undefined : handleMapPress}
         // O mapa de um local interno é lido de cima: girar e inclinar não acrescenta
         // nada e a rotação da cena é justamente o tipo de movimento que mais causa
         // desconforto (RNF04). Zoom e arraste ficam liberados fora da edição de vértice.
@@ -1043,8 +1086,8 @@ const DrawnMap = forwardRef<EventMapHandle, EventMapProps>(function DrawnMap(
             // ignora o `onPress` da polilinha. Ele só é pedido quando existe
             // callback, para não transformar todo trajeto em área de toque numa
             // tela em que ninguém quer selecionar.
-            tappable={polyline.onPress !== undefined && !polyline.editable}
-            onPress={polyline.editable ? undefined : polyline.onPress}
+            tappable={polyline.onPress !== undefined}
+            onPress={polyline.onPress}
           />
         ))}
 
@@ -1055,6 +1098,17 @@ const DrawnMap = forwardRef<EventMapHandle, EventMapProps>(function DrawnMap(
             fillColor={RECT_FILL_COLORS[item.tone ?? 'default']}
             strokeColor={TONE_COLORS[item.tone ?? 'default']}
             strokeWidth={RECT_STROKE_WIDTH}
+          />
+        ))}
+
+        {areas.map((area) => (
+          <Polygon
+            key={`area-${area.id}`}
+            coordinates={validCoordinates(area.geometry).map(toLatLng)}
+            fillColor="rgba(99, 102, 241, 0.14)"
+            strokeColor={colors.primary}
+            strokeWidth={RECT_STROKE_WIDTH}
+            tappable={false}
           />
         ))}
 
@@ -1168,11 +1222,13 @@ function contentCoordinates(
   markers: MapMarker[],
   polylines: MapPolyline[],
   rects: MapRect[],
+  areas: MapArea[],
 ): MapGeometry {
   return [
     ...markers.map((marker) => marker.coordinate),
     ...polylines.flatMap((polyline) => polyline.geometry),
     ...rects.flatMap((item) => rectCorners(item.rect)),
+    ...areas.flatMap((area) => area.geometry),
   ];
 }
 
@@ -1190,7 +1246,12 @@ function validCoordinates(geometry: MapGeometry): MapGeometry {
  * arrasta a alça — contar pontos não serviria, porque o número de cantos é sempre
  * quatro, e quem redesenha a cada arraste perde o lugar na tela.
  */
-function describeContent(markers: MapMarker[], polylines: MapPolyline[], rects: MapRect[]): string {
+function describeContent(
+  markers: MapMarker[],
+  polylines: MapPolyline[],
+  rects: MapRect[],
+  areas: MapArea[],
+): string {
   return [
     ...markers.map((marker) => `${marker.id}:${marker.coordinate[0]},${marker.coordinate[1]}`),
     ...polylines.map((polyline) =>
@@ -1203,6 +1264,7 @@ function describeContent(markers: MapMarker[], polylines: MapPolyline[], rects: 
         : `${polyline.id}:${polyline.geometry.length}:${describeEndpoints(polyline)}`,
     ),
     ...rects.map((item) => `${item.id}:${describeRect(item.rect)}`),
+    ...areas.map((area) => `${area.id}:${area.geometry.map((point) => point.join(',')).join(';')}`),
   ].join('|');
 }
 

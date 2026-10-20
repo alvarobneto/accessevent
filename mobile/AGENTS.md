@@ -171,18 +171,14 @@ contrastes está em `src/theme/tokens.js`.
 
 ## Navegação dentro das seções
 
-- O cabeçalho nativo (`headerLeft`/`headerRight` em `organizer/_layout.tsx` e `user/_layout.tsx`) é o
-  único ponto de navegação: voltar à esquerda (`arrow-left`) e trocar de modo à direita
-  (`account-switch-outline`). Os componentes ficam em `src/components/header-actions.tsx`.
-- **Não** repita a troca de modo como card/CTA dentro das telas — a ação vive só no cabeçalho.
+- O cabeçalho nativo usa voltar à esquerda (`arrow-left`). O lado direito fica vazio por padrão e
+  mostra apenas ações contextuais declaradas pela tela, agrupadas por `HeaderActions` em
+  `src/components/header-actions.tsx`.
 - Telas raiz (`/organizer`, `/user`) sobrescrevem `headerLeft` com `() => null`: não há tela anterior
   porque a entrada na seção usa `router.replace`.
 - Telas internas não repetem o título que o cabeçalho já mostra; mostram apenas o texto de apoio.
-- A troca de modo usa `router.dismissTo('/')`: dentro de uma tela aninhada ela sobe até `/`, e na raiz
-  substitui a seção inteira — `router.replace('/')` resolveria dentro da pilha da seção.
-- `Stack.Screen` sobrescreve `headerRight` inteiro. Uma tela que tenha ação própria monta
-  `HeaderActions` de `src/components/header-actions.tsx` com a ação como `children`, em vez de
-  repetir o botão de troca de modo.
+- `Stack.Screen` define `headerRight` apenas nas telas que têm ação própria. Cada uma monta
+  `HeaderActions` de `src/components/header-actions.tsx` com a ação como `children`.
 - **Item de lista abre, menu edita.** Um item de lista leva para a tela da coisa; ver os dados
   novamente ou editá-los é ação do menu de três pontinhos do cabeçalho (`src/components/ui/menu.tsx`,
   que é o `MenuView` do `@expo/ui`). Isso vale para eventos e para navegações, e vale para os dois
@@ -251,13 +247,13 @@ contrastes está em `src/theme/tokens.js`.
 /organizer/event/[eventId]/edit         Editar evento
 /organizer/event/[eventId]/map/new      Criar navegação
 /organizer/event/[eventId]/map/[mapId]  Consulta da navegação: desenho + listas + botão "Editar a navegação"
-/organizer/event/[eventId]/map/[mapId]/edit  Editar navegação (card de rename + portas: ponto, caminho, ajuste)
+/organizer/event/[eventId]/map/[mapId]/edit  Editar navegação (card de rename + portas: ponto/área, caminho, ajuste)
 /organizer/event/[eventId]/map/[mapId]/adjust  Ajustar caminhos diretamente no mapa
 /organizer/event/[eventId]/map/[mapId]/record    Gravar um caminho novo (Sprint 4)
 /organizer/event/[eventId]/map/[mapId]/path/[pathId]  Editar caminho (nome + porta para o ajuste; Sprint 6)
 /organizer/event/[eventId]/map/[mapId]/path/[pathId]/adjust  Ajustar trajeto no mapa (vértices e trechos)
-/organizer/event/[eventId]/map/[mapId]/poi/new      Criar ponto de interesse (Sprint 7)
 /organizer/event/[eventId]/map/[mapId]/poi/[poiId]  Editar ponto de interesse (Sprint 7)
+/organizer/event/[eventId]/map/[mapId]/areas  Desenhar/editar áreas e adicionar pontos de interesse (Sprint 8)
 /organizer/event/[eventId]/map/[mapId]/details  Detalhes da navegação (criada/atualizada em)
 /user                    Eventos para consulta
 /user/categories           Categorias com eventos cadastrados e a contagem de cada uma
@@ -595,6 +591,17 @@ salvar vários caminhos nessa mesma tela. O editor de nome também tem um botão
 tone="success"`. **"Descartar alterações"** só aparece com alterações pendentes
   e volta ao `savedGeometry`. Sem `useRefreshOnFocus` aqui: recarregar no foco
   jogaria o rascunho fora.
+- Na tela `/adjust`, a faixa de seleção é uma linha compacta acima do mapa. O
+  botão fixo **"Salvar ajustes"** fica no rodapé mesmo sem seleção, desabilitado
+  quando não há rascunhos alterados. Ao ativá-lo, salva todos os caminhos
+  modificados; se parte falhar, mantém os rascunhos restantes para nova tentativa.
+- Ao tocar numa rota ou em seu card, o `EventMap` centraliza todos os extremos da
+  geometria com padding em pixels reduzido e aproxima até o máximo permitido pelo
+  piso de zoom. Se o zoom atual já estiver mais próximo, preserva-o. Rascunhos de
+  rotas não selecionadas continuam desenhados no mapa ao trocar de seleção.
+- Um toque no fundo do mapa procura a rota mais próxima até 3 m: isso mantém a
+  seleção de rota confiável mesmo quando o provedor não dispara `Polyline.onPress`.
+  Sem rota nesse raio, o toque desmarca a seleção.
 
 **A camada de arraste (`components/map/path-edit-overlay.tsx`).**
 
@@ -603,14 +610,17 @@ tone="success"`. **"Descartar alterações"** só aparece com alterações pende
   increment = afastar/esquerda e decrement = aproximar/direita,
   `onPanResponderTerminationRequest: () => false`. Um arraste por vez
   (`dragActive`).
-- **Só vértices existentes são editáveis.** `selectHandleIndices(vertices,
-PATH_HANDLE_SPACING)` decima as alças; a linha e o fundo ficam livres para pan e
-  pinça do mapa. Nenhum gesto ou ação de acessibilidade insere vértices.
+- **Só vértices existentes são editáveis.** `selectHandleIndices` identifica as
+  pontas e mudanças relevantes de direção sem reduzir a geometria enviada à API:
+  uma reta tem duas alças, um V três e um W cinco. Arrastar uma alça redistribui
+  as amostras do trecho adjacente, preservando a quantidade original de pontos e
+  mantendo as alças disponíveis quando a rota fica reta. A linha e o fundo ficam
+  livres para pan e pinça; nenhum gesto insere ou remove vértices.
 - **As alças acompanham o pan.** `onRegionChange` reprojeta as alças visíveis
   durante o movimento, agrupando o trabalho por frame; `onRegionChangeComplete`
-  refaz a seleção completa. Durante o arraste de uma alça, a projeção fica
-  congelada para o alvo não sair debaixo do dedo, e o próprio ponto acompanha o
-  gesto via `projectCoordinate`.
+  reprojeta a seleção existente, inclusive depois de zoom ou redimensionamento do
+  mapa. Durante o arraste de uma alça, a projeção fica congelada para o alvo não
+  sair debaixo do dedo, e o próprio ponto acompanha o gesto via `projectCoordinate`.
 - Quem usa leitor de tela usa `nudgeVertex` (`utils/pathGeometry.ts`, passo de
   2 m), e o SR chama `onPreview` + `onCommit` juntos (`commitNudge`).
 - `describeContent` usa `${id}:editing` para a polilinha editável, para não
@@ -621,8 +631,9 @@ PATH_HANDLE_SPACING)` decima as alças; a linha e o fundo ficam livres para pan 
   (`.catch(() => undefined)`) — o próximo `cameraTick`/`isReady` tenta de novo.
   Sem `try/catch` no corpo.
 - **O array de respondentes do overlay é posicional** (`handles.map`), enquanto
-  `handle.index` é o índice na geometria — esparsa nas alças. Buscar o responder
-  pelo índice geométrico deixa alça sem gesto (ou move o vértice errado).
+  `handle.index` é o índice (esparso) na geometria original. Buscar o responder
+  pelo índice geométrico em vez da posição no array pode deixar alça sem gesto
+  (ou mover o vértice errado).
 - `react-hooks/refs`: o `latest.current` só é atualizado dentro de `useEffect`
   (nunca durante render, que a regra aceita); os `eslint-disable-next-line
 react-hooks/refs` dos `map`s ficam ancorados na linha do erro, com a justificativa
@@ -781,9 +792,9 @@ do ponto ficam para a Sprint 10. O que a Sprint 7 entrega é o cadastro.
   de a pessoa preencher o resto do formulário, e o conjunto de tipos é o vocabulário do
   grafo — o valor gravado precisa ser um dos treze. `PoiTypeValues` vive em
   `src/data/types.ts`, espelhando o `PoiTypeValues` do `poi.entity.ts` do backend.
-- **O formulário é o `PoiForm`** (`src/components/poi-form.tsx`), compartilhado por
-  "Novo ponto" e "Editar ponto" como o `EventForm` do evento. As duas telas são
-  finas: carregam o contexto e passam `onSubmit`/`onDelete`.
+- **O editor de ponto usa `PoiForm`** (`src/components/poi-form.tsx`): a tela é
+  fina, carrega o contexto e passa `onSubmit`/`onDelete`. Pontos novos são
+  adicionados no editor de áreas do mapa.
 - **Apagar ponto é por linha, com `Dialog` destrutivo**, como o caminho. O editor
   também apaga, com o `DeleteAction` — a ação irreversível mora no corpo da tela,
   nunca no menu do cabeçalho.
@@ -798,15 +809,17 @@ do ponto ficam para a Sprint 10. O que a Sprint 7 entrega é o cadastro.
   move um ponto, e chega por `onMapPress` do `EventMap`, que devolve a coordenada
   já no formato gravado (`Coordinate`), não o `LatLng` do `react-native-maps`.
 
-### Canvas experimental de áreas (base para a Sprint 8)
+### Áreas do mapa (Sprint 8)
 
-`/poi/new` é o fluxo persistido da Sprint 7: usa `PoiForm` para criar um ponto,
-escolher sua posição no mapa e chamar `repository.createPoi`. O `MapCanvas` e o
-`poiEditorReducer` continuam como uma base experimental, fora do fluxo de criação
-de POI: desenham áreas e associam um item por área em memória, sem persistir. Essa
-base não conclui a Sprint 8, que ainda precisa do modelo e da API de `Area` e de
-um fluxo próprio de salvar/reabrir. As decisões técnicas do canvas ficam registradas
-abaixo para quando a sprint de áreas for retomada:
+O botão "Adicionar ponto de interesse" da tela de edição abre
+`/organizer/event/[eventId]/map/[mapId]/areas`, que é o editor persistido da
+Sprint 8. O `MapCanvas` e o `poiEditorReducer` permitem adicionar pontos de
+interesse, além de desenhar (retângulo/freehand), selecionar, nomear, tipar,
+salvar, editar e apagar áreas via
+`repository.listAreas`/`createArea`/`updateArea`/`deleteArea`. O modelo e a API de
+`Area` vivem em `backend/src/areas/`; o app fala com eles pelo `httpRepository` e
+o `inMemoryRepository` espelha as mesmas regras (inclusive o cascade ao apagar
+navegação/evento). As decisões técnicas do canvas ficam registradas abaixo:
 
 - **O desenho é SVG (`react-native-svg`), não o `EventMap`.** O editor precisa de
   conversão ponto↔coordenada bidirecional para desenhar retângulo/livre, mover área e
@@ -894,7 +907,8 @@ mapa de exemplo, que não tem interação de pan, pode manter o gesto de tela in
 `listEventCategories`, `createEvent`, `getEvent`,
 `updateEvent`, `deleteEvent`, `listNavigationMaps`, `createNavigationMap`, `getNavigationMap`,
 `renameNavigationMap`, `deleteNavigationMap`, `listPaths`, `createPath`, `getPath`,
-`updatePath`, `deletePath`).
+`updatePath`, `deletePath`, `replacePathGeometry`, `listPois`, `createPoi`, `getPoi`,
+`updatePoi`, `deletePoi`, `listAreas`, `createArea`, `updateArea`, `deleteArea`).
 O singleton exportado por `src/data/index.ts` escolhe a implementação por
 `EXPO_PUBLIC_DATA_SOURCE`:
 

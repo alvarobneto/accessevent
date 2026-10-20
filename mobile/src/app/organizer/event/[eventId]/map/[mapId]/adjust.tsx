@@ -9,14 +9,22 @@ import { Alert, Button, Card, EmptyState, Icon, Text } from '@/components/ui';
 import { repository } from '@/data';
 import type { Path, PointOfInterest } from '@/data/types';
 import { useAsyncData } from '@/hooks/useAsyncData';
-import { useMapGestureNavigation, type MapGestureTouchHandlers } from '@/hooks/useMapGestureNavigation';
+import {
+  useMapGestureNavigation,
+  type MapGestureTouchHandlers,
+} from '@/hooks/useMapGestureNavigation';
 import { colors } from '@/theme/tokens';
+import type { Coordinate } from '@/types/coordinates';
 import type { MapGeometry, MapPolyline } from '@/types/map';
 import { toErrorMessage } from '@/utils/errors';
 import { formatDistance } from '@/utils/format';
 import { geometryLengthInMeters } from '@/utils/geo';
 import { markersFromPois, polylinesFromPaths, rectsFromPois } from '@/utils/mapContent';
 import { pathLabels } from '@/utils/pathLabel';
+import { distanceToPathInMeters } from '@/utils/pathGeometry';
+
+/** Tolerância de toque no traçado quando o MapView reporta o toque no fundo. */
+const PATH_TAP_TOLERANCE_M = 3;
 
 /**
  * Ajustar rotas direto no mapa: todos os caminhos ficam visíveis e o organizador
@@ -36,37 +44,35 @@ export default function AdjustPathsScreen() {
   return (
     <>
       <Stack.Screen
-        options={{ ...mapGestures.screenOptions, headerShown: true, title: 'Ajustar rota' }}
+        options={{ ...mapGestures.screenOptions, headerShown: true, title: 'Ajustar rotas' }}
       />
 
-      <Screen
-        scrollable
-        contentClassName="flex-grow gap-3 px-4 pb-4 pt-3"
-        testID="adjust-paths-screen"
-      >
-        <AsyncContent
-          state={content.state}
-          onRetry={content.reload}
-          loadingLabel="Carregando o mapa…"
-          isEmpty={({ paths }) => paths.length === 0}
-          empty={
-            <EmptyState
-              icon="vector-polyline"
-              title="Nenhum caminho registrado"
-              description="Volte à navegação e mapeie um caminho antes de ajustar as rotas."
-            >
-              <Button label="Voltar ao mapa" variant="outline" onPress={() => router.back()} />
-            </EmptyState>
-          }
-        >
-          {({ paths, pois }) => (
-            <AdjustPathsEditor
-              paths={paths}
-              pois={pois}
-              mapTouchHandlers={mapGestures.touchHandlers}
-            />
-          )}
-        </AsyncContent>
+      <Screen contentClassName="flex-1 px-4 py-2" testID="adjust-paths-screen">
+        <View className="flex-1">
+          <AsyncContent
+            state={content.state}
+            onRetry={content.reload}
+            loadingLabel="Carregando o mapa…"
+            isEmpty={({ paths }) => paths.length === 0}
+            empty={
+              <EmptyState
+                icon="vector-polyline"
+                title="Nenhum caminho registrado"
+                description="Volte à navegação e mapeie um caminho antes de ajustar as rotas."
+              >
+                <Button label="Voltar ao mapa" variant="outline" onPress={() => router.back()} />
+              </EmptyState>
+            }
+          >
+            {({ paths, pois }) => (
+              <AdjustPathsEditor
+                paths={paths}
+                pois={pois}
+                mapTouchHandlers={mapGestures.touchHandlers}
+              />
+            )}
+          </AsyncContent>
+        </View>
       </Screen>
     </>
   );
@@ -78,7 +84,11 @@ type AdjustPathsEditorProps = {
   mapTouchHandlers: MapGestureTouchHandlers;
 };
 
-function AdjustPathsEditor({ paths: initialPaths, pois, mapTouchHandlers }: AdjustPathsEditorProps) {
+function AdjustPathsEditor({
+  paths: initialPaths,
+  pois,
+  mapTouchHandlers,
+}: AdjustPathsEditorProps) {
   const [paths, setPaths] = useState(initialPaths);
   const [selectedPathId, setSelectedPathId] = useState<string | null>(null);
   // Rascunhos por trajeto permitem alternar entre rotas sem perder ajustes ainda
@@ -91,6 +101,11 @@ function AdjustPathsEditor({ paths: initialPaths, pois, mapTouchHandlers }: Adju
   const selectedPath = paths.find((path) => path.id === selectedPathId) ?? null;
   const draft = selectedPath ? (drafts[selectedPath.id] ?? selectedPath.geometry) : null;
   const dirty = selectedPath !== null && draft !== selectedPath.geometry;
+  const changedPaths = paths.flatMap((path) => {
+    const geometry = drafts[path.id];
+    return geometry && geometry !== path.geometry ? [{ path, geometry }] : [];
+  });
+  const hasChanges = changedPaths.length > 0;
 
   const selectPath = useCallback(
     (pathId: string) => {
@@ -100,6 +115,33 @@ function AdjustPathsEditor({ paths: initialPaths, pois, mapTouchHandlers }: Adju
       setFeedback(null);
     },
     [saving],
+  );
+
+  const clearPathSelection = useCallback(() => {
+    if (saving) return;
+    setSelectedPathId(null);
+    setError(null);
+    setFeedback(null);
+  }, [saving]);
+
+  const selectPathAtCoordinate = useCallback(
+    (coordinate: Coordinate) => {
+      let nearestPathId: string | null = null;
+      let nearestDistance = PATH_TAP_TOLERANCE_M;
+
+      for (const path of paths) {
+        const geometry = drafts[path.id] ?? path.geometry;
+        const distance = distanceToPathInMeters(coordinate, geometry);
+        if (distance < nearestDistance) {
+          nearestPathId = path.id;
+          nearestDistance = distance;
+        }
+      }
+
+      if (nearestPathId) selectPath(nearestPathId);
+      else clearPathSelection();
+    },
+    [paths, drafts, selectPath, clearPathSelection],
   );
 
   const applyDraft = useCallback(
@@ -119,7 +161,8 @@ function AdjustPathsEditor({ paths: initialPaths, pois, mapTouchHandlers }: Adju
 
         return {
           ...polyline,
-          geometry: isSelected ? (drafts[polyline.id] ?? polyline.geometry) : polyline.geometry,
+          // Todos os rascunhos continuam visíveis ao trocar a rota selecionada.
+          geometry: drafts[polyline.id] ?? polyline.geometry,
           tone: isSelected ? 'highlight' : 'default',
           onPress: () => selectPath(polyline.id),
           ...(isSelected
@@ -138,23 +181,51 @@ function AdjustPathsEditor({ paths: initialPaths, pois, mapTouchHandlers }: Adju
   const rects = useMemo(() => rectsFromPois(pois), [pois]);
 
   const handleSave = async () => {
-    if (!selectedPath || !draft || !dirty) return;
+    if (!hasChanges || saving) return;
 
     setSaving(true);
     setError(null);
     setFeedback(null);
 
     try {
-      const updated = await repository.replacePathGeometry(selectedPath.id, draft);
-      setPaths((current) => current.map((path) => (path.id === updated.id ? updated : path)));
+      const results = await Promise.allSettled(
+        changedPaths.map(({ path, geometry }) => repository.replacePathGeometry(path.id, geometry)),
+      );
+      const savedEntries = results.flatMap((result, index) =>
+        result.status === 'fulfilled'
+          ? [{ ...changedPaths[index]!, updatedPath: result.value }]
+          : [],
+      );
+      const failedResult = results.find((result) => result.status === 'rejected');
+
+      setPaths((current) =>
+        current.map(
+          (path) =>
+            savedEntries.find(({ updatedPath }) => updatedPath.id === path.id)?.updatedPath ?? path,
+        ),
+      );
       setDrafts((current) => {
         const next = { ...current };
-        delete next[updated.id];
+        for (const { path, geometry } of savedEntries) {
+          if (next[path.id] === geometry) delete next[path.id];
+        }
         return next;
       });
-      setFeedback(`Ajuste de “${pathLabels(updated).title}” salvo.`);
-    } catch (saveError) {
-      setError(toErrorMessage(saveError, 'Não foi possível salvar o ajuste do trajeto.'));
+      if (failedResult?.status === 'rejected') {
+        const partialSave =
+          savedEntries.length > 0
+            ? ` ${savedEntries.length} de ${changedPaths.length} rotas foram salvas; as demais continuam pendentes.`
+            : '';
+        setError(
+          `${toErrorMessage(failedResult.reason, 'Não foi possível salvar todas as rotas.')}${partialSave}`,
+        );
+      } else {
+        setFeedback(
+          savedEntries.length === 1
+            ? 'Ajuste salvo para 1 rota.'
+            : `Ajustes salvos para ${savedEntries.length} rotas.`,
+        );
+      }
     } finally {
       setSaving(false);
     }
@@ -175,24 +246,21 @@ function AdjustPathsEditor({ paths: initialPaths, pois, mapTouchHandlers }: Adju
 
   return (
     <>
-      <View className="gap-1">
-        <View className="flex-row items-center justify-between gap-2">
-          <Text variant="label">1. Escolha um caminho</Text>
-          <Text variant="caption" tint="muted">
-            {paths.length} {paths.length === 1 ? 'caminho' : 'caminhos'}
-          </Text>
-        </View>
-        <Text variant="caption" tint="muted">
-          Selecione uma opção ou toque no traçado do mapa.
-        </Text>
-      </View>
-
       <ScrollView
         horizontal
+        className="max-h-12 flex-none"
         showsHorizontalScrollIndicator={false}
         accessibilityLabel="Caminhos disponíveis para ajuste. Deslize na horizontal para ver todos."
       >
-        <View className="flex-row gap-2 py-1 pr-5">
+        <View className="flex-row items-center gap-2 pr-4">
+          <View className="justify-center pr-1">
+            <Text variant="caption" className="font-semibold">
+              Rotas
+            </Text>
+            <Text variant="caption" tint="muted">
+              {paths.length}
+            </Text>
+          </View>
           {paths.map((path) => (
             <PathOption
               key={path.id}
@@ -205,13 +273,13 @@ function AdjustPathsEditor({ paths: initialPaths, pois, mapTouchHandlers }: Adju
         </View>
       </ScrollView>
 
-      <Text variant="label">2. Ajuste os pontos no mapa</Text>
-      <View className="min-h-56 flex-1" {...mapTouchHandlers}>
+      <View className="min-h-0 flex-1" {...mapTouchHandlers}>
         <EventMap
-          className="h-full rounded-xl border border-border"
+          className="flex-1 rounded-xl border border-border"
           polylines={polylines}
           markers={markers}
           rects={rects}
+          onMapPress={selectPathAtCoordinate}
           accessibilityLabel={
             selectedPath && labels
               ? `Mapa com ${paths.length} caminhos. ${labels.title} está selecionado para ajuste.`
@@ -221,23 +289,22 @@ function AdjustPathsEditor({ paths: initialPaths, pois, mapTouchHandlers }: Adju
         />
       </View>
 
-      <View className="gap-4">
+      <View className="gap-2 pt-1">
         {feedback ? <Alert tone="success" title="Ajuste salvo" description={feedback} /> : null}
         {error ? <Alert tone="error" title="Não foi possível salvar" description={error} /> : null}
 
         {selectedPath && labels && draft ? (
           <Card
             variant={dirty ? 'highlight' : 'outline'}
-            className="gap-3 p-3"
+            className="gap-2 p-2"
             title={labels.title}
             subtitle={`${formatDistance(geometryLengthInMeters(draft))} · ${dirty ? 'Alterações não salvas' : 'Sem alterações'}`}
             trailing={<Icon name="vector-polyline" size={24} color={colors.primary} />}
           >
-            <Text variant="caption">
-              Arraste os pontos azuis para corrigir o traçado. Para mudar de caminho, escolha outra
-              opção acima.
-            </Text>
-            <View className="flex-row gap-2">
+            <View className="flex-row items-center gap-2">
+              <Text variant="caption" className="flex-1">
+                Arraste as alças para ajustar o traçado.
+              </Text>
               {dirty ? (
                 <Button
                   label="Descartar"
@@ -246,31 +313,23 @@ function AdjustPathsEditor({ paths: initialPaths, pois, mapTouchHandlers }: Adju
                   iconStart={<Icon name="undo" size={20} color={colors.content} />}
                   disabled={saving}
                   onPress={handleDiscard}
-                  className="flex-1"
                   testID="discard-path-adjust"
                 />
               ) : null}
-              <Button
-                label="Salvar ajuste"
-                loading={saving}
-                loadingLabel="Salvando…"
-                disabled={!dirty}
-                iconStart={<Icon name="check" size={20} color={colors.white} />}
-                onPress={() => void handleSave()}
-                className="flex-1"
-                testID="save-path-adjust"
-              />
             </View>
           </Card>
-        ) : (
-          <Card variant="soft" className="gap-1 p-3">
-            <Text variant="label">Nenhum caminho selecionado</Text>
-            <Text variant="caption">
-              Escolha um caminho na faixa acima ou toque em um traçado no mapa. Os outros continuam
-              visíveis como referência.
-            </Text>
-          </Card>
-        )}
+        ) : null}
+
+        <Button
+          label="Salvar ajustes"
+          loading={saving}
+          loadingLabel="Salvando…"
+          disabled={!hasChanges || saving}
+          iconStart={<Icon name="check" size={20} color={colors.white} />}
+          onPress={() => void handleSave()}
+          fullWidth
+          testID="save-path-adjust"
+        />
       </View>
     </>
   );
@@ -295,14 +354,9 @@ function PathOption({ path, selected, hasPendingChanges, onPress }: PathOptionPr
       accessibilityHint="Seleciona este caminho para ajustar os pontos no mapa."
       accessibilityState={{ selected }}
       testID={`select-path-${path.id}`}
-      className={`min-h-16 w-44 flex-row items-center gap-2 rounded-lg border px-3 py-2 active:opacity-70 ${selected ? 'border-primary bg-primary-50' : 'border-border bg-background'}`}
+      className={`min-h-12 w-36 flex-row items-center gap-2 rounded-lg border px-2 py-1 active:opacity-70 ${selected ? 'border-primary bg-primary-50' : 'border-border bg-background'}`}
     >
-      <Icon
-        name="vector-polyline"
-        size={20}
-        color={selected ? colors.primary : colors.gray500}
-      />
-      <View className="flex-1 gap-1">
+      <View className="flex-1 gap-0">
         <Text variant="caption" numberOfLines={1} className="font-semibold">
           {labels.title}
         </Text>

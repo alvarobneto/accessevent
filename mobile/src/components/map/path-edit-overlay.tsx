@@ -11,15 +11,13 @@ import { colors } from '@/theme/tokens';
 import type { Coordinate } from '@/types/coordinates';
 import type { MapGeometry } from '@/types/map';
 import type { ScreenPoint } from '@/utils/dropCoordinate';
-import { moveVertex, nudgeVertex } from '@/utils/pathGeometry';
+import { moveControlPoint, nudgeControlPoint } from '@/utils/pathGeometry';
 
 /**
- * Espaçamento mínimo entre alças, em pixels — o piso de 44px do `design.md`.
+ * Tamanho do alvo de cada alça, em pixels — o piso de 44px do `design.md`.
  *
- * É a mesma constante do tamanho da alça porque as duas medições respondem à
- * mesma pergunta: de quanto em quanto vale a pena existir um alvo separado.
- * Alças mais juntas que isso viram caixas sobrepostas onde nada dá para acertar
- * separado, e o `EventMap` usa este número para decimar os vértices viram alça.
+ * É o alvo acessível da alça. As alças representam as pontas e as mudanças de
+ * direção da rota, embora a geometria completa continue preservada.
  */
 export const PATH_HANDLE_SPACING = 44;
 
@@ -84,9 +82,10 @@ export type PathEditOverlayProps = {
  * canto do retângulo (`poi-rect-handles.tsx`), pelo mesmo motivo.
  *
  * Só as alças capturam gestos: a linha e o fundo continuam pertencendo ao mapa,
- * permitindo mover a câmera sem criar vértices. Arrastar substitui exatamente a
- * coordenada da alça selecionada; os demais vértices mantêm posição, índice e
- * identidade. Quem usa leitor de tela ajusta o mesmo vértice pelas ações acessíveis.
+ * permitindo mover a câmera sem criar vértices. Arrastar reposiciona o vértice de
+ * controle e redistribui as amostras dos trechos adjacentes, sem alterar a contagem
+ * nem a identidade dos pontos. Quem usa leitor de tela ajusta as mesmas alças pelas
+ * ações acessíveis.
  */
 export function PathEditOverlay({
   geometry,
@@ -143,6 +142,7 @@ export function PathEditOverlay({
 
   const [activeDrag, setActiveDrag] = useState<ActiveDrag | null>(null);
   const [previewHandles, setPreviewHandles] = useState<PreviewHandles | null>(null);
+  const controlIndices = useMemo(() => handles.map((handle) => handle.index), [handles]);
 
   /**
    * Confirma uma alteração feita pelo leitor de tela.
@@ -152,13 +152,14 @@ export function PathEditOverlay({
    * vai junto com a pré-visualização, senão a alteração nunca seria marcada.
    */
   const commitNudge = useCallback(
-    (next: MapGeometry) => {
+    (index: number, direction: 'out' | 'in') => {
+      const next = nudgeControlPoint(geometry, controlIndices, index, direction);
       if (next === geometry) return;
 
       onPreview(next);
       onCommit?.(next);
     },
-    [geometry, onPreview, onCommit],
+    [geometry, controlIndices, onPreview, onCommit],
   );
 
   /** Soltou (ou o gesto foi tomado): confirma o que o arraste produziu. */
@@ -232,7 +233,7 @@ export function PathEditOverlay({
               if (!coordinate || !dragActive.current || sequence !== moveSequence.current) return;
 
               const base = dragStartGeometry.current ?? state.geometry;
-              const next = moveVertex(base, index, coordinate);
+              const next = moveControlPoint(base, controlIndices, index, coordinate);
               if (next === base) return;
 
               pending.current = next;
@@ -271,7 +272,7 @@ export function PathEditOverlay({
           onPanResponderTerminationRequest: () => false,
         });
       }),
-    [handles, claimGesture, finishGesture],
+    [handles, controlIndices, claimGesture, finishGesture],
   );
 
   const dragged = activeDrag;
@@ -299,10 +300,10 @@ export function PathEditOverlay({
             accessibilityLabel={`${accessibilityLabel}. Ponto ${position + 1} de ${handles.length}. Arraste para movê-lo, ou use as ações para afastar ou aproximar o ponto da linha do trajeto.`}
             onAccessibilityAction={(event) => {
               if (event.nativeEvent.actionName === 'increment') {
-                commitNudge(nudgeVertex(geometry, handle.index, 'out'));
+                commitNudge(handle.index, 'out');
               }
               if (event.nativeEvent.actionName === 'decrement') {
-                commitNudge(nudgeVertex(geometry, handle.index, 'in'));
+                commitNudge(handle.index, 'in');
               }
             }}
             style={[

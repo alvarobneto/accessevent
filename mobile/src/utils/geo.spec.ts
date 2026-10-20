@@ -6,7 +6,9 @@ import {
   distanceInMeters,
   geometryLengthInMeters,
   isValidCoordinate,
+  MINIMUM_DELTA,
   regionForCoordinate,
+  regionForGeometryInViewport,
 } from '@/utils/geo';
 
 /** Recife, onde fica o Centro de Convivência Cultural da UFPE. */
@@ -67,6 +69,29 @@ describe('regionForCoordinate', () => {
   it('usa o mesmo zoom inicial padrão que os demais mapas', () => {
     expect(regionForCoordinate(RECIFE).latitudeDelta).toBe(DEFAULT_MAP_DELTA);
     expect(regionForCoordinate(RECIFE).longitudeDelta).toBe(DEFAULT_MAP_DELTA);
+  });
+});
+
+describe('regionForGeometryInViewport', () => {
+  it('usa os extremos da rota e a aproxima até ocupar a área disponível', () => {
+    const route: MapGeometry = [
+      [-0.0002, -0.0001],
+      [0, 0],
+      [0.0002, 0.0001],
+    ];
+
+    const region = regionForGeometryInViewport(route, 400, 400, 20);
+
+    expect(region?.latitude).toBe(0);
+    expect(region?.longitude).toBe(0);
+    expect(region?.latitudeDelta).toBeCloseTo(0.0004 * (400 / 360), 12);
+    expect(region?.longitudeDelta).toBeCloseTo(region?.latitudeDelta ?? 0, 12);
+  });
+
+  it('mantém o zoom mínimo e devolve null sem coordenadas válidas ou sem tamanho', () => {
+    expect(regionForGeometryInViewport([RECIFE], 400, 400)?.latitudeDelta).toBe(MINIMUM_DELTA);
+    expect(regionForGeometryInViewport([], 400, 400)).toBeNull();
+    expect(regionForGeometryInViewport([RECIFE], 0, 400)).toBeNull();
   });
 });
 

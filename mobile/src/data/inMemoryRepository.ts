@@ -3,12 +3,14 @@ import { anchorToPosition, normalizeRect } from '@/utils/poiAnchor';
 
 import type {
   AppRepository,
+  AreaChanges,
   EventChanges,
   NewEvent,
   NewNavigationMap,
   NewPath,
+  NewArea,
 } from './repository';
-import type { Event, EventCategoryCount, NavigationMap, Path, PointOfInterest } from './types';
+import type { Area, Event, EventCategoryCount, NavigationMap, Path, PointOfInterest } from './types';
 
 /**
  * Implementação em memória do `AppRepository`.
@@ -24,6 +26,7 @@ export function createInMemoryRepository(): AppRepository {
   const navigationMaps: NavigationMap[] = [];
   const paths: Path[] = [];
   const pois: PointOfInterest[] = [];
+  const areas: Area[] = [];
   let sequence = 0;
 
   const nextId = (prefix: string) => `${prefix}-${++sequence}`;
@@ -111,10 +114,16 @@ export function createInMemoryRepository(): AppRepository {
         navigationMaps.filter((map) => map.eventId === eventId).map((map) => map.id),
       );
       const keptPaths = paths.filter((path) => !removedMapIds.has(path.mapId));
+      const keptPois = pois.filter((poi) => !removedMapIds.has(poi.mapId));
       navigationMaps.length = 0;
       navigationMaps.push(...keptMaps);
       paths.length = 0;
       paths.push(...keptPaths);
+      pois.length = 0;
+      pois.push(...keptPois);
+      const keptAreas = areas.filter((area) => !removedMapIds.has(area.mapId));
+      areas.length = 0;
+      areas.push(...keptAreas);
     },
 
     async listNavigationMaps(eventId: string) {
@@ -172,6 +181,9 @@ export function createInMemoryRepository(): AppRepository {
       const keptPois = pois.filter((poi) => poi.mapId !== mapId);
       pois.length = 0;
       pois.push(...keptPois);
+      const keptAreas = areas.filter((area) => area.mapId !== mapId);
+      areas.length = 0;
+      areas.push(...keptAreas);
     },
 
     async listPaths(mapId) {
@@ -312,6 +324,48 @@ export function createInMemoryRepository(): AppRepository {
     async deletePoi(poiId) {
       const idx = pois.findIndex((p) => p.id === poiId);
       if (idx >= 0) pois.splice(idx, 1);
+    },
+
+    async listAreas(mapId) {
+      return areas
+        .filter((area) => area.mapId === mapId)
+        .sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+    },
+
+    async createArea(input: NewArea) {
+      if (!navigationMaps.some((map) => map.id === input.mapId)) {
+        throw new Error('Não foi possível criar a área: a navegação não existe mais.');
+      }
+      const timestamp = now();
+      const area: Area = {
+        id: nextId('area'),
+        mapId: input.mapId,
+        name: input.name.trim(),
+        type: input.type,
+        geometry: input.geometry,
+        description: clean(input.description),
+        createdAt: timestamp,
+        updatedAt: timestamp,
+      };
+      areas.push(area);
+      return area;
+    },
+
+    async updateArea(areaId: string, changes: AreaChanges) {
+      const area = areas.find((item) => item.id === areaId);
+      if (!area) throw new Error('Não foi possível salvar: a área não existe mais.');
+      if (changes.name !== undefined) area.name = changes.name.trim();
+      if (changes.type !== undefined) area.type = changes.type;
+      if (changes.geometry !== undefined) area.geometry = changes.geometry;
+      if (changes.description !== undefined) area.description = clean(changes.description);
+      area.updatedAt = now();
+      return area;
+    },
+
+    async deleteArea(areaId) {
+      const index = areas.findIndex((area) => area.id === areaId);
+      if (index < 0) throw new Error('Não foi possível apagar: a área não existe mais.');
+      areas.splice(index, 1);
     },
   };
 }

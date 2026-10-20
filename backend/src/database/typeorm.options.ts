@@ -7,6 +7,7 @@ import { MapEntity } from '../maps/map.entity.js';
 import { PathEntity } from '../paths/path.entity.js';
 import { UserEntity } from '../users/user.entity.js';
 import { PoiEntity } from '../pois/poi.entity.js';
+import { AreaEntity } from '../areas/area.entity.js';
 import { CreateEventsAndMaps1730000000000 } from './migrations/1730000000000-CreateEventsAndMaps.js';
 import { CreatePaths1730000001000 } from './migrations/1730000001000-CreatePaths.js';
 import { AddEventCategory1730000002000 } from './migrations/1730000002000-AddEventCategory.js';
@@ -15,6 +16,7 @@ import { AddPathName1730000004000 } from './migrations/1730000004000-AddPathName
 import { CreatePointsOfInterest1730000005000 } from './migrations/1730000005000-CreatePointsOfInterest.js';
 import { AddPoiRect1730000006000 } from './migrations/1730000006000-AddPoiRect.js';
 import { MakeUserBirthDateOptional1730000007000 } from './migrations/1730000007000-MakeUserBirthDateOptional.js';
+import { CreateAreas1730000008000 } from './migrations/1730000008000-CreateAreas.js';
 
 /**
  * Entidades e migrações ficam declaradas aqui, e não só via `autoLoadEntities`,
@@ -35,6 +37,7 @@ export const entities = [
   PathEntity,
   UserEntity,
   PoiEntity,
+  AreaEntity,
 ];
 
 export const migrations = [
@@ -46,6 +49,7 @@ export const migrations = [
   CreatePointsOfInterest1730000005000,
   AddPoiRect1730000006000,
   MakeUserBirthDateOptional1730000007000,
+  CreateAreas1730000008000,
 ];
 
 /**

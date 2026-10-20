@@ -1,6 +1,6 @@
-import type { Path, PointOfInterest } from '@/data/types';
+import type { Area, Path, PointOfInterest } from '@/data/types';
 
-import { markersFromPois, polylinesFromPaths, rectsFromPois } from './mapContent';
+import { markersFromPois, polygonsFromAreas, polylinesFromPaths, rectsFromPois } from './mapContent';
 
 function makePath(overrides: Partial<Path> = {}): Path {
   return {
@@ -32,6 +32,24 @@ function makePoi(overrides: Partial<PointOfInterest> = {}): PointOfInterest {
     position: [-23.5505, -46.6333],
     description: null,
     accessibilityInfo: null,
+    createdAt: '2026-09-02T10:00:00.000Z',
+    updatedAt: '2026-09-02T10:00:00.000Z',
+    ...overrides,
+  };
+}
+
+function makeArea(overrides: Partial<Area> = {}): Area {
+  return {
+    id: 'area-1',
+    mapId: 'map-1',
+    name: 'Praça de alimentação',
+    type: 'alimentacao',
+    geometry: [
+      [-23.5505, -46.6333],
+      [-23.5505, -46.6323],
+      [-23.5515, -46.6323],
+    ],
+    description: null,
     createdAt: '2026-09-02T10:00:00.000Z',
     updatedAt: '2026-09-02T10:00:00.000Z',
     ...overrides,
@@ -183,5 +201,26 @@ describe('rectsFromPois', () => {
     });
 
     expect(rectsFromPois([inverted])).toEqual([]);
+  });
+});
+
+describe('polygonsFromAreas', () => {
+  it('preserves the area identity, descriptive fields, and polygon geometry', () => {
+    expect(polygonsFromAreas([makeArea()])).toEqual([
+      {
+        id: 'area-1',
+        name: 'Praça de alimentação',
+        type: 'alimentacao',
+        geometry: makeArea().geometry,
+        description: undefined,
+      },
+    ]);
+  });
+
+  it('does not render incomplete or invalid polygon geometry', () => {
+    expect(polygonsFromAreas([makeArea({ geometry: [[0, 0], [1, 1]] })])).toEqual([]);
+    expect(
+      polygonsFromAreas([makeArea({ geometry: [[0, 0], [1, 1], [91, 0]] })]),
+    ).toEqual([]);
   });
 });

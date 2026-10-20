@@ -1,14 +1,14 @@
 import { Stack } from 'expo-router';
 
-import { HeaderActions, HeaderBackButton } from '@/components/header-actions';
+import { HeaderBackButton } from '@/components/header-actions';
 import { headerTheme } from '@/theme/tokens';
 
 /**
  * Área do organizador.
  *
  * O cabeçalho usa o padrão de apps de produtividade: título grande no topo
- * (iOS), fundo da mesma cor da tela, sem sombra, botão de voltar próprio à
- * esquerda e troca de modo à direita.
+ * (iOS), fundo da mesma cor da tela, sem sombra e botão de voltar próprio à
+ * esquerda. Ações contextuais são declaradas apenas pelas telas que as possuem.
  */
 export default function OrganizerLayout() {
   return (
@@ -18,7 +18,6 @@ export default function OrganizerLayout() {
         headerShown: true,
         headerBackVisible: false,
         headerLeft: (props) => <HeaderBackButton canGoBack={props.canGoBack} />,
-        headerRight: () => <HeaderActions />,
         headerLargeTitle: false,
         animation: 'slide_from_right',
         // O gesto fica desativado por padrão. As telas com mapa substituem esta
@@ -63,7 +62,7 @@ export default function OrganizerLayout() {
       />
       <Stack.Screen
         name="event/[eventId]/map/[mapId]/adjust"
-        options={{ title: 'Ajustar rota', gestureEnabled: false }}
+        options={{ title: 'Ajustar rotas', gestureEnabled: false }}
       />
       <Stack.Screen
         name="event/[eventId]/map/[mapId]/path/[pathId]/adjust"
@@ -80,19 +79,20 @@ export default function OrganizerLayout() {
         options={{ title: 'Detalhes da navegação' }}
       />
       <Stack.Screen
-        name="event/[eventId]/map/[mapId]/poi/new"
+        name="event/[eventId]/map/[mapId]/poi/[poiId]"
         options={{
-          title: 'Adicionar ponto de interesse',
-          // O canvas é arrastável em todos os sentidos: o gesto de voltar do iOS
-          // (borda esquerda) disputaria o toque com o pan do mapa. Desligado
-          // aqui, no registro estático — o voltar continua pelo botão do header.
+          title: 'Editar ponto',
           gestureEnabled: false,
         }}
       />
       <Stack.Screen
-        name="event/[eventId]/map/[mapId]/poi/[poiId]"
+        name="event/[eventId]/map/[mapId]/areas"
         options={{
-          title: 'Editar ponto',
+          title: 'Áreas do mapa',
+          // O `MapCanvas` é arrastável em todos os sentidos: o gesto de voltar do
+          // iOS (borda esquerda) disputaria o toque com o desenho. Desligado aqui,
+          // no registro estático; a tela reativa o gesto fora do mapa via
+          // `useMapGestureNavigation`.
           gestureEnabled: false,
         }}
       />

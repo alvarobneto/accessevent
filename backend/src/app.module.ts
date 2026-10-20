@@ -15,6 +15,7 @@ import { MapsModule } from './maps/maps.module.js';
 import { PathsModule } from './paths/paths.module.js';
 import { PoisModule } from './pois/pois.module.js';
 import { UsersModule } from './users/users.module.js';
+import { AreasModule } from './areas/areas.module.js';
 
 @Module({
   imports: [
@@ -31,6 +32,7 @@ import { UsersModule } from './users/users.module.js';
         buildTypeOrmOptions(config.getOrThrow<DatabaseSettings>('database')),
     }),
     AuthModule,
+    AreasModule,
     EventsModule,
     HealthModule,
     MapsModule,

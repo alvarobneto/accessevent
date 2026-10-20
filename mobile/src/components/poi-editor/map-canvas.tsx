@@ -915,7 +915,7 @@ export const MapCanvas = forwardRef<MapCanvasHandle, MapCanvasProps>(function Ma
           style={styles.hint}
           accessibilityLiveRegion="polite"
         >
-          Use o quadrado para criar um cômodo ou o lápis para desenhar uma área livre.
+          Use “Desenhar área” para criar um retângulo ou “Desenho livre” para traçar o contorno.
         </Text>
       ) : null}
 

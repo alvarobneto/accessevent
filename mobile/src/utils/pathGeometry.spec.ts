@@ -1,9 +1,11 @@
 import type { Coordinate } from '@/types/coordinates';
 import type { MapGeometry } from '@/types/map';
-import type { ScreenPoint } from '@/utils/dropCoordinate';
 
 import {
+  distanceToPathInMeters,
+  moveControlPoint,
   moveVertex,
+  nudgeControlPoint,
   nudgeVertex,
   retainPathHandleSelection,
   selectHandleIndices,
@@ -91,85 +93,150 @@ describe('moveVertex', () => {
   });
 });
 
-describe('selectHandleIndices', () => {
-  it('devolve vazio para geometria vazia', () => {
-    expect(selectHandleIndices([], 44)).toEqual([]);
-  });
-
-  it('mantém sempre o primeiro e o último', () => {
-    const points: ScreenPoint[] = [
-      { x: 0, y: 0 },
-      { x: 1, y: 0 },
-      { x: 2, y: 0 },
-      { x: 3, y: 0 },
+describe('distanceToPathInMeters', () => {
+  it('mede a distância mínima até o trecho mais próximo', () => {
+    const route: MapGeometry = [
+      [0, 0],
+      [0, 0.002],
+      [0.002, 0.002],
     ];
 
-    const indices = selectHandleIndices(points, 44);
+    expect(distanceToPathInMeters([0.00001, 0.001], route)).toBeCloseTo(1.1132, 3);
+    expect(distanceToPathInMeters([0.001, 0.002], route)).toBeCloseTo(0, 6);
+    expect(distanceToPathInMeters([0, 0], [])).toBe(Number.POSITIVE_INFINITY);
+  });
+});
 
-    expect(indices[0]).toBe(0);
-    expect(indices[indices.length - 1]).toBe(3);
+describe('selectHandleIndices', () => {
+  it('mantém só as pontas de uma rota reta com amostras intermediárias', () => {
+    const straight: MapGeometry = Array.from({ length: 10 }, (_value, index) => [
+      0,
+      index * 0.0001,
+    ]);
+
+    expect(selectHandleIndices(straight)).toEqual([0, 9]);
   });
 
-  it('espaça as alças mantidas pelo menos minSpacing de distância', () => {
-    const points: ScreenPoint[] = Array.from({ length: 100 }, (_value, index) => ({
-      x: index,
-      y: 0,
-    }));
+  it('mantém três alças num V e cinco num W sem alterar a geometria fonte', () => {
+    const vShape: MapGeometry = [
+      [0, 0],
+      [0.0005, 0.0005],
+      [0.001, 0.001],
+      [0.0005, 0.0015],
+      [0, 0.002],
+    ];
+    const wShape: MapGeometry = [
+      [0, 0],
+      [0.0005, 0.0005],
+      [0.001, 0.001],
+      [0.0005, 0.0015],
+      [0, 0.002],
+      [0.0005, 0.0025],
+      [0.001, 0.003],
+      [0.0005, 0.0035],
+      [0, 0.004],
+    ];
 
-    // As alças caem em 0, 44, 88 e a última forçada em 99: o espaçamento é
-    // medido entre alças mantidas, e a ponta entra mesmo perto da anterior.
-    expect(selectHandleIndices(points, 44)).toEqual([0, 44, 88, 99]);
+    expect(selectHandleIndices(vShape)).toEqual([0, 2, 4]);
+    expect(selectHandleIndices(wShape)).toEqual([0, 2, 4, 6, 8]);
+    expect(vShape).toHaveLength(5);
+    expect(wShape).toHaveLength(9);
+  });
+});
+
+describe('moveControlPoint', () => {
+  it('move um vértice de controle e redistribui amostras sem mudar a contagem', () => {
+    const geometry: MapGeometry = [
+      [0, 0],
+      [0.001, 0.001],
+      [0.002, 0.002],
+      [0.001, 0.003],
+      [0, 0.004],
+    ];
+    const controls = [0, 2, 4];
+
+    const moved = moveControlPoint(geometry, controls, 2, [0, 0.002]);
+
+    expect(moved).toHaveLength(geometry.length);
+    expect(moved).toEqual([
+      [0, 0],
+      [0, 0.001],
+      [0, 0.002],
+      [0, 0.003],
+      [0, 0.004],
+    ]);
   });
 
-  it('mantém um trajeto de dois pontos inteiro', () => {
-    expect(
-      selectHandleIndices(
-        [
-          { x: 0, y: 0 },
-          { x: 10, y: 10 },
-        ],
-        44,
-      ),
-    ).toEqual([0, 1]);
+  it('permite transformar um W em reta mantendo todos os pontos da API', () => {
+    const wShape: MapGeometry = [
+      [0, 0],
+      [0.0005, 0.0005],
+      [0.001, 0.001],
+      [0.0005, 0.0015],
+      [0, 0.002],
+      [0.0005, 0.0025],
+      [0.001, 0.003],
+      [0.0005, 0.0035],
+      [0, 0.004],
+    ];
+    const controls = selectHandleIndices(wShape);
+    const straightened = controls.slice(1, -1).reduce((geometry, index) => {
+      const current = geometry[index]!;
+      return moveControlPoint(geometry, controls, index, [0, current[1]]);
+    }, wShape);
+
+    expect(controls).toEqual([0, 2, 4, 6, 8]);
+    expect(straightened).toHaveLength(wShape.length);
+    expect(straightened.every(([latitude]) => latitude === 0)).toBe(true);
+  });
+});
+
+describe('nudgeControlPoint', () => {
+  it('ajusta acessivelmente uma alça e mantém a contagem do trajeto', () => {
+    const geometry: MapGeometry = [
+      [0, 0],
+      [0, 0.0005],
+      [0, 0.001],
+      [0, 0.0015],
+      [0, 0.002],
+    ];
+
+    const nudged = nudgeControlPoint(geometry, [0, 2, 4], 2, 'out');
+
+    expect(nudged).toHaveLength(geometry.length);
+    expect(nudged[2]?.[0]).toBeGreaterThan(geometry[2]![0]);
+    expect(nudged[1]?.[0]).toBeGreaterThan(geometry[1]![0]);
   });
 });
 
 describe('retainPathHandleSelection', () => {
-  it('preserva índices após mover vértices que mudam o espaçamento junto a uma curva', () => {
-    const original: ScreenPoint[] = [
-      { x: 0, y: 0 },
-      { x: 50, y: 0 },
-      { x: 100, y: 0 },
-      { x: 100, y: 50 },
-      { x: 100, y: 100 },
+  it('preserva os índices durante o ajuste mesmo quando os pontos ficam alinhados', () => {
+    const original: MapGeometry = [
+      [0, 0],
+      [0.001, 0.001],
+      [0.002, 0.002],
+      [0.001, 0.003],
+      [0, 0.004],
     ];
-    const moved: ScreenPoint[] = [
-      { x: 0, y: 0 },
-      { x: 50, y: 0 },
-      { x: 95, y: 45 },
-      { x: 100, y: 50 },
-      { x: 100, y: 100 },
-    ];
-    const initialSelection = retainPathHandleSelection(null, 'path-1', original, 44);
+    const moved: MapGeometry = original.map((point) => [0, point[1]]);
+    const initialSelection = retainPathHandleSelection(null, 'path-1', original);
 
-    const afterMove = retainPathHandleSelection(initialSelection, 'path-1', moved, 44);
+    const afterMove = retainPathHandleSelection(initialSelection, 'path-1', moved);
 
     expect(afterMove).toBe(initialSelection);
     expect(afterMove.indices).toEqual(initialSelection.indices);
   });
 
   it('calcula uma seleção nova para outro caminho ou outra quantidade de vértices', () => {
-    const points: ScreenPoint[] = [
-      { x: 0, y: 0 },
-      { x: 50, y: 0 },
-      { x: 100, y: 0 },
+    const points: MapGeometry = [
+      [0, 0],
+      [0, 0.001],
+      [0, 0.002],
     ];
-    const initial = retainPathHandleSelection(null, 'path-1', points, 44);
+    const initial = retainPathHandleSelection(null, 'path-1', points);
 
-    expect(retainPathHandleSelection(initial, 'path-2', points, 44)).not.toBe(initial);
-    expect(
-      retainPathHandleSelection(initial, 'path-1', [...points, { x: 150, y: 0 }], 44),
-    ).not.toBe(initial);
+    expect(retainPathHandleSelection(initial, 'path-2', points)).not.toBe(initial);
+    expect(retainPathHandleSelection(initial, 'path-1', [...points, [0, 0.003]])).not.toBe(initial);
   });
 });
 

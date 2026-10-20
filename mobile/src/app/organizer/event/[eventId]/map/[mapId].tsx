@@ -11,12 +11,12 @@ import { Screen } from '@/components/screen';
 import { Section } from '@/components/section';
 import { Badge, Button, Card, EmptyState, Icon, Text } from '@/components/ui';
 import { repository } from '@/data';
-import type { Path, PointOfInterest } from '@/data/types';
+import type { Area, Path, PointOfInterest } from '@/data/types';
 import { useAsyncData } from '@/hooks/useAsyncData';
 import { useMapGestureNavigation } from '@/hooks/useMapGestureNavigation';
 import { useRefreshOnFocus } from '@/hooks/useRefreshOnFocus';
 import { colors } from '@/theme/tokens';
-import { markersFromPois, polylinesFromPaths, rectsFromPois } from '@/utils/mapContent';
+import { markersFromPois, polygonsFromAreas, polylinesFromPaths, rectsFromPois } from '@/utils/mapContent';
 
 /**
  * Listas vazias com identidade estável.
@@ -27,6 +27,7 @@ import { markersFromPois, polylinesFromPaths, rectsFromPois } from '@/utils/mapC
  */
 const NO_PATHS: readonly Path[] = [];
 const NO_POIS: readonly PointOfInterest[] = [];
+const NO_AREAS: readonly Area[] = [];
 
 /**
  * Gerenciar Navegação: o mapa e o que já existe nele (modo consulta).
@@ -64,21 +65,26 @@ export default function ManageNavigationMapScreen() {
   const map = useAsyncData(() => repository.getNavigationMap(id), id);
   const savedPaths = useAsyncData(() => repository.listPaths(id), id);
   const savedPois = useAsyncData(() => repository.listPois(id), id);
+  const savedAreas = useAsyncData(() => repository.listAreas(id), id);
 
   useRefreshOnFocus((showIndicator) => {
     map.reload(showIndicator);
     savedPaths.reload(showIndicator);
     savedPois.reload(showIndicator);
+    savedAreas.reload(showIndicator);
   });
 
   const navigationName = map.state.status === 'success' ? map.state.data?.name : null;
 
   const paths = savedPaths.state.status === 'success' ? savedPaths.state.data : NO_PATHS;
   const pois = savedPois.state.status === 'success' ? savedPois.state.data : NO_POIS;
+  const areas = savedAreas.state.status === 'success' ? savedAreas.state.data : NO_AREAS;
   // Não montar a câmera sem os dados que localizam o mapa: `initialRegion` vale
   // só na montagem, e o centro de fallback não representa o local do evento.
   const isMapContentLoading =
-    savedPaths.state.status === 'loading' || savedPois.state.status === 'loading';
+    savedPaths.state.status === 'loading' ||
+    savedPois.state.status === 'loading' ||
+    savedAreas.state.status === 'loading';
 
   const openPathEditor = useCallback(
     (pathId: string) => {
@@ -133,6 +139,7 @@ export default function ManageNavigationMapScreen() {
     pois.length > 0
       ? `${pois.length} ${pois.length === 1 ? 'ponto de interesse' : 'pontos de interesse'}`
       : null,
+    areas.length > 0 ? `${areas.length} ${areas.length === 1 ? 'área' : 'áreas'}` : null,
   ]
     .filter((part) => part !== null)
     .join(' com ');
@@ -156,8 +163,9 @@ export default function ManageNavigationMapScreen() {
           map.reload();
           savedPaths.reload();
           savedPois.reload();
+          savedAreas.reload();
         }}
-        refreshing={map.refreshing || savedPaths.refreshing || savedPois.refreshing}
+        refreshing={map.refreshing || savedPaths.refreshing || savedPois.refreshing || savedAreas.refreshing}
         testID="manage-navigation-map-screen"
       >
         <AsyncContent state={map.state} onRetry={map.reload} loadingLabel="Carregando a navegação…">
@@ -183,6 +191,7 @@ export default function ManageNavigationMapScreen() {
                         markers={markers}
                         polylines={polylines}
                         rects={rects}
+                        areas={polygonsFromAreas(areas)}
                         accessibilityLabel={mapAccessibilityLabel}
                         fitPadding={12}
                       />

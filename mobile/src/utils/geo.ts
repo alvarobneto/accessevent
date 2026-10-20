@@ -165,6 +165,54 @@ export function regionForGeometry(geometry: MapGeometry): Region | null {
 }
 
 /**
+ * Enquadra os extremos da geometria na área desenhada do mapa.
+ *
+ * Diferente do enquadramento global, não acrescenta folga geográfica fixa: o
+ * padding é calculado em pixels para que a rota selecionada ocupe o máximo da
+ * tela, respeitando o piso de zoom do mapa.
+ */
+export function regionForGeometryInViewport(
+  geometry: MapGeometry,
+  width: number,
+  height: number,
+  padding = 24,
+): Region | null {
+  if (width <= 0 || height <= 0) return null;
+
+  let south: number | null = null;
+  let north: number | null = null;
+  let west: number | null = null;
+  let east: number | null = null;
+
+  for (const coordinate of geometry) {
+    if (!isValidCoordinate(coordinate)) continue;
+
+    const [latitude, longitude] = coordinate;
+    south = south === null || latitude < south ? latitude : south;
+    north = north === null || latitude > north ? latitude : north;
+    west = west === null || longitude < west ? longitude : west;
+    east = east === null || longitude > east ? longitude : east;
+  }
+
+  if (south === null || north === null || west === null || east === null) return null;
+
+  const availableWidth = Math.max(width - padding * 2, 1);
+  const availableHeight = Math.max(height - padding * 2, 1);
+  const latitudeDelta = Math.max(
+    MINIMUM_DELTA,
+    ((north - south) * height) / availableHeight,
+    ((east - west) * height) / availableWidth,
+  );
+
+  return {
+    latitude: (south + north) / 2,
+    longitude: (west + east) / 2,
+    latitudeDelta,
+    longitudeDelta: latitudeDelta * (width / height),
+  };
+}
+
+/**
  * Região fixa ao redor de um ponto — a câmera que acompanha quem está percorrendo
  * o local, usada na gravação de caminho da Sprint 4.
  */

@@ -9,7 +9,10 @@ import { Alert, Button, EmptyState, Text } from '@/components/ui';
 import { repository } from '@/data';
 import type { Path, PointOfInterest } from '@/data/types';
 import { useAsyncData } from '@/hooks/useAsyncData';
-import { useMapGestureNavigation, type MapGestureTouchHandlers } from '@/hooks/useMapGestureNavigation';
+import {
+  useMapGestureNavigation,
+  type MapGestureTouchHandlers,
+} from '@/hooks/useMapGestureNavigation';
 import type { MapGeometry, MapPolyline } from '@/types/map';
 import { toErrorMessage } from '@/utils/errors';
 import { formatDistance } from '@/utils/format';
@@ -226,8 +229,9 @@ function AdjustPathEditor({ path, paths, pois, mapTouchHandlers }: AdjustPathEdi
             {dirty ? ' · alterações não salvas' : ''}
           </Text>
           <Text variant="caption">
-            Arraste um ponto para reposicionar somente esse vértice. Os outros permanecem fixos.
-            Arraste a linha ou o fundo para mover o mapa. Nada é salvo até você tocar em salvar.
+            Arraste um ponto para reposicionar a mudança de direção. As alças permanecem visíveis
+            mesmo quando alinhadas. Arraste a linha ou o fundo para mover o mapa; nada é salvo até
+            você tocar em salvar.
           </Text>
         </View>
 

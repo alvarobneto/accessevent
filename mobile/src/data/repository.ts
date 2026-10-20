@@ -5,6 +5,8 @@ import type {
   Event,
   EventCategory,
   EventCategoryCount,
+  Area,
+  AreaType,
   NavigationMap,
   Path,
   PointOfInterest,
@@ -94,6 +96,12 @@ export interface AppRepository {
   getPoi(poiId: string): Promise<PointOfInterest | null>;
   updatePoi(poiId: string, changes: PoiChanges): Promise<PointOfInterest>;
   deletePoi(poiId: string): Promise<void>;
+
+  /** Áreas abertas desenhadas na navegação. */
+  listAreas(mapId: string): Promise<Area[]>;
+  createArea(input: NewArea): Promise<Area>;
+  updateArea(areaId: string, changes: AreaChanges): Promise<Area>;
+  deleteArea(areaId: string): Promise<void>;
 }
 
 /**
@@ -114,3 +122,13 @@ export type NewPointOfInterest = {
 };
 
 export type PoiChanges = Partial<NewPointOfInterest>;
+
+export type NewArea = {
+  mapId: string;
+  name: string;
+  type: AreaType;
+  geometry: MapGeometry;
+  description?: string | null;
+};
+
+export type AreaChanges = Partial<Omit<NewArea, 'mapId'>>;

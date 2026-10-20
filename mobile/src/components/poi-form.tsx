@@ -28,7 +28,7 @@ const NAME_MAX_LENGTH = 120;
 /** Identificador do marcador e do retângulo da posição escolhida, antes de salvar. */
 const DRAFT_ID = 'poi-draft';
 
-/** Formulário do ponto de interesse, compartilhado por "Novo ponto" e "Editar ponto". */
+/** Formulário para editar um ponto de interesse já cadastrado. */
 export type PoiFormValues = {
   name: string;
   type: PoiType;

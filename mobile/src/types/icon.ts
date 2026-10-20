@@ -20,7 +20,6 @@
  */
 export type IconName =
   | 'account-outline'
-  | 'account-switch-outline'
   | 'alert-circle-outline'
   | 'alert-outline'
   | 'arrow-left'

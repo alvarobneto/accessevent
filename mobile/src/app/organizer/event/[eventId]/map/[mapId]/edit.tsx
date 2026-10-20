@@ -16,8 +16,8 @@ import { toErrorMessage } from '@/utils/errors';
  * Editar navegação: o que se faz com o mapa, num lugar só.
  *
  * O hub virou consulta — mostra o desenho e as listas — e esta tela concentra as
- * três portas de edição da navegação: renomear, ajustar um trajeto já gravado,
- * gravar um caminho novo e marcar um ponto de interesse. Três botões espalhados
+ * portas de edição da navegação: renomear, editar áreas e pontos de interesse,
+ * ajustar um trajeto já gravado e gravar um caminho novo. Três botões espalhados
  * no hub competiam com o mapa; aqui a pessoa já veio de propósito.
  *
  * O card de título veio do antigo `/organizer/map/[mapId]`, que era só o rename
@@ -54,11 +54,12 @@ export default function EditNavigationMapScreen() {
                 >
                   <View className="gap-3">
                     <Button
-                      label="Adicionar ponto de interesse"
+                      label="Adicionar pontos de interesse"
                       variant="outline"
+                      iconStart={<Icon name="vector-polygon" size={20} color={colors.content} />}
                       onPress={() =>
                         router.push({
-                          pathname: '/organizer/event/[eventId]/map/[mapId]/poi/new',
+                          pathname: '/organizer/event/[eventId]/map/[mapId]/areas',
                           params: { eventId, mapId: id },
                         })
                       }
@@ -80,9 +81,9 @@ export default function EditNavigationMapScreen() {
                     />
 
                     <Button
-                      label="Ajustar rota"
+                      label="Ajustar rotas"
                       variant="outline"
-                      iconStart={<Icon name="vector-polyline" size={20} color={colors.content} />}
+                      iconStart={<Icon name="edit-outline" size={20} color={colors.content} />}
                       onPress={() =>
                         router.push({
                           pathname: '/organizer/event/[eventId]/map/[mapId]/adjust',

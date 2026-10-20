@@ -100,6 +100,15 @@ export type MapRect = {
   onResize?: (rect: PoiRect) => void;
 };
 
+/** Polígono de uma área cadastrada pelo organizador. */
+export type MapArea = {
+  id: string;
+  name: string;
+  type: string;
+  geometry: MapGeometry;
+  description?: string;
+};
+
 /**
  * Polilinha do mapa: o trajeto de um `Path` do PRD §8.2. `Path` ganha os nós de
  * ponta, a distância e os atributos de acessibilidade nas Sprints 5 e 9; o desenho

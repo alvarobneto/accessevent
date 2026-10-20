@@ -8,15 +8,16 @@ import { NavigationMenu } from '@/components/navigation-menu';
 import { Screen } from '@/components/screen';
 import { Alert, Button, Card, EmptyState, Icon, Text } from '@/components/ui';
 import { repository } from '@/data';
-import type { Path, PointOfInterest } from '@/data/types';
+import type { Area, Path, PointOfInterest } from '@/data/types';
 import { useAsyncData } from '@/hooks/useAsyncData';
 import { useMapGestureNavigation } from '@/hooks/useMapGestureNavigation';
 import { useRefreshOnFocus } from '@/hooks/useRefreshOnFocus';
 import { colors } from '@/theme/tokens';
-import { markersFromPois, polylinesFromPaths, rectsFromPois } from '@/utils/mapContent';
+import { markersFromPois, polygonsFromAreas, polylinesFromPaths, rectsFromPois } from '@/utils/mapContent';
 
 const NO_PATHS: readonly Path[] = [];
 const NO_POIS: readonly PointOfInterest[] = [];
+const NO_AREAS: readonly Area[] = [];
 
 /**
  * Mapa da navegação: a tela é o mapa que o organizador desenhou.
@@ -37,11 +38,13 @@ export default function UserMapScreen() {
   const map = useAsyncData(() => repository.getNavigationMap(id), id);
   const savedPaths = useAsyncData(() => repository.listPaths(id), id);
   const savedPois = useAsyncData(() => repository.listPois(id), id);
+  const savedAreas = useAsyncData(() => repository.listAreas(id), id);
 
   const reload = (showIndicator = true) => {
     map.reload(showIndicator);
     savedPaths.reload(showIndicator);
     savedPois.reload(showIndicator);
+    savedAreas.reload(showIndicator);
   };
 
   useRefreshOnFocus(reload);
@@ -49,11 +52,14 @@ export default function UserMapScreen() {
   const mapName = map.state.status === 'success' ? map.state.data?.name : null;
   const paths = savedPaths.state.status === 'success' ? savedPaths.state.data : NO_PATHS;
   const pois = savedPois.state.status === 'success' ? savedPois.state.data : NO_POIS;
+  const areas = savedAreas.state.status === 'success' ? savedAreas.state.data : NO_AREAS;
   const markers = useMemo(() => markersFromPois(pois), [pois]);
   const polylines = useMemo(() => polylinesFromPaths(paths), [paths]);
   const rects = useMemo(() => rectsFromPois(pois), [pois]);
   const isMapContentLoading =
-    savedPaths.state.status === 'loading' || savedPois.state.status === 'loading';
+    savedPaths.state.status === 'loading' ||
+    savedPois.state.status === 'loading' ||
+    savedAreas.state.status === 'loading';
   const mapContentFailed =
     (savedPaths.state.status === 'error' || savedPois.state.status === 'error') &&
     paths.length === 0 &&
@@ -66,6 +72,7 @@ export default function UserMapScreen() {
     pois.length > 0
       ? `${pois.length} ${pois.length === 1 ? 'ponto de interesse' : 'pontos de interesse'}`
       : null,
+    areas.length > 0 ? `${areas.length} ${areas.length === 1 ? 'área' : 'áreas'}` : null,
   ]
     .filter((part) => part !== null)
     .join(' com ');
@@ -85,7 +92,7 @@ export default function UserMapScreen() {
       <Screen
         scrollable
         onRefresh={() => reload()}
-        refreshing={map.refreshing || savedPaths.refreshing || savedPois.refreshing}
+        refreshing={map.refreshing || savedPaths.refreshing || savedPois.refreshing || savedAreas.refreshing}
         testID="user-map-screen"
       >
         <AsyncContent state={map.state} onRetry={reload} loadingLabel="Carregando o mapa…">
@@ -126,6 +133,7 @@ export default function UserMapScreen() {
                         markers={markers}
                         polylines={polylines}
                         rects={rects}
+                        areas={polygonsFromAreas(areas)}
                         accessibilityLabel={mapAccessibilityLabel}
                         fitPadding={12}
                       />

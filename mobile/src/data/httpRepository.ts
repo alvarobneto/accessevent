@@ -2,12 +2,14 @@ import { api, ApiError } from '@/services/apiClient';
 
 import type {
   AppRepository,
+  AreaChanges,
   EventChanges,
   NewEvent,
   NewNavigationMap,
   NewPath,
+  NewArea,
 } from './repository';
-import type { Event, EventCategoryCount, NavigationMap, Path, PointOfInterest } from './types';
+import type { Area, Event, EventCategoryCount, NavigationMap, Path, PointOfInterest } from './types';
 
 /**
  * `AppRepository` sobre a API do backend (Sprint 2).
@@ -142,6 +144,22 @@ export function createHttpRepository(): AppRepository {
 
     async deletePoi(poiId) {
       await api.delete<void>(`/pois/${poiId}`);
+    },
+
+    async listAreas(mapId) {
+      return api.get<Area[]>(`/maps/${mapId}/areas`);
+    },
+
+    async createArea({ mapId, ...body }: NewArea) {
+      return api.post<Area>(`/maps/${mapId}/areas`, compact(body));
+    },
+
+    async updateArea(areaId: string, changes: AreaChanges) {
+      return api.patch<Area>(`/areas/${areaId}`, compact(changes));
+    },
+
+    async deleteArea(areaId) {
+      await api.delete<void>(`/areas/${areaId}`);
     },
   };
 }
