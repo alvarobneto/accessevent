@@ -9,11 +9,15 @@ import {
 } from 'react';
 import {
   Linking,
+  PanResponder,
   Platform,
   Pressable,
   StyleSheet,
   View,
+  type GestureResponderEvent,
   type LayoutChangeEvent,
+  type NativeTouchEvent,
+  type PanResponderGestureState,
 } from 'react-native';
 import MapView, {
   Marker,
@@ -24,6 +28,12 @@ import MapView, {
   type MarkerDragEvent,
   type Region,
 } from 'react-native-maps';
+import Svg, {
+  Circle as SvgCircle,
+  Image as SvgImage,
+  Polygon as SvgPolygon,
+  Polyline as SvgPolyline,
+} from 'react-native-svg';
 
 import { MapPin } from '@/components/map/map-pin';
 import { PathEditOverlay, type PathHandle } from '@/components/map/path-edit-overlay';
@@ -31,6 +41,7 @@ import { RectHandleOverlay } from '@/components/map/poi-rect-handles';
 import { EmptyState, IconButton, Text } from '@/components/ui';
 import { hasGoogleMapsAndroidKey } from '@/config/env';
 import { tv } from '@/lib/tv';
+import { cachedMapTileUri } from '@/services/mapTileCache';
 import { colors } from '@/theme/tokens';
 import type { Coordinate, Coordinates } from '@/types/coordinates';
 import type { MapArea, MapGeometry, MapMarker, MapPolyline, MapRect, MapTone } from '@/types/map';
@@ -50,12 +61,24 @@ import {
   regionForGeometryInViewport,
   toLatLng,
 } from '@/utils/geo';
-import { OSM_TILE_MAX_ZOOM, OSM_TILE_URL_TEMPLATE, TILE_CACHE_TTL_MS } from '@/utils/tiles';
+import {
+  OSM_TILE_MAX_ZOOM,
+  OSM_TILE_URL_TEMPLATE,
+  TILE_CACHE_TTL_MS,
+  tilesForViewport,
+  type MapTile,
+} from '@/utils/tiles';
 import {
   INITIAL_CENTER,
   INITIAL_LATITUDE_DELTA,
   ZOOM_FACTOR,
+  mapToScreen,
+  normalizeViewport,
+  panViewport,
+  screenToMap,
   zoomViewportAt,
+  type MapViewport,
+  type ViewportSize,
 } from '@/utils/mapViewport';
 
 /** Cor de cada tom. As três fecham 3:1 ou mais contra o desenho claro do mapa. */
@@ -322,8 +345,10 @@ const DrawnMap = forwardRef<EventMapHandle, EventMapProps>(function DrawnMap(
 ) {
   const mapRef = useRef<MapView>(null);
   const containerRef = useRef<View>(null);
-  const [isReady, setIsReady] = useState(false);
+  const [isReady, setIsReady] = useState(Platform.OS === 'android');
   const [hasLayout, setHasLayout] = useState(false);
+  const [androidViewport, setAndroidViewport] = useState<MapViewport | null>(null);
+  const [androidSize, setAndroidSize] = useState<ViewportSize>({ width: 0, height: 0 });
 
   /**
    * Retângulo do mapa na janela, por `measureInWindow`, e região visível mais
@@ -344,6 +369,17 @@ const DrawnMap = forwardRef<EventMapHandle, EventMapProps>(function DrawnMap(
   const activeZoomRegion = useRef<Region | null>(null);
   const requestedZoomRegion = useRef<Region | null>(null);
   const queuedZoomRegion = useRef<Region | null>(null);
+
+  const scheduleAndroidViewport = useCallback((region: Region) => {
+    if (Platform.OS !== 'android') return;
+    requestAnimationFrame(() => {
+      setAndroidViewport({
+        center: [region.latitude, region.longitude],
+        latitudeDelta: region.latitudeDelta,
+        longitudeDelta: region.longitudeDelta,
+      });
+    });
+  }, []);
 
   /**
    * Conteúdo corrente, lido pelo efeito de enquadramento.
@@ -473,7 +509,8 @@ const DrawnMap = forwardRef<EventMapHandle, EventMapProps>(function DrawnMap(
       latitudeDelta: initialRegion.latitudeDelta,
       longitudeDelta: initialRegion.longitudeDelta,
     };
-  }, [initialRegion]);
+    scheduleAndroidViewport(initialRegion);
+  }, [initialRegion, scheduleAndroidViewport]);
 
   /**
    * O retângulo de agora, ou `null` enquanto falta tamanho ou região. A
@@ -556,7 +593,9 @@ const DrawnMap = forwardRef<EventMapHandle, EventMapProps>(function DrawnMap(
               longitudeDelta: currentRegion.longitudeDelta,
             }
           : focusRegion;
+      visibleRegion.current = targetRegion;
       map.animateToRegion(targetRegion, CAMERA_DURATION);
+      scheduleAndroidViewport(targetRegion);
       return;
     }
 
@@ -584,16 +623,16 @@ const DrawnMap = forwardRef<EventMapHandle, EventMapProps>(function DrawnMap(
         longitudeDelta: INITIAL_LATITUDE_DELTA,
       };
       const latitudeDelta = Math.max(center.latitudeDelta, INITIAL_LATITUDE_DELTA);
+      const nextEmptyRegion = {
+        latitude: center.latitude,
+        longitude: center.longitude,
+        latitudeDelta,
+        longitudeDelta: latitudeDelta * aspect,
+      };
 
-      map.animateToRegion(
-        {
-          latitude: center.latitude,
-          longitude: center.longitude,
-          latitudeDelta,
-          longitudeDelta: latitudeDelta * aspect,
-        },
-        CAMERA_DURATION,
-      );
+      visibleRegion.current = nextEmptyRegion;
+      map.animateToRegion(nextEmptyRegion, CAMERA_DURATION);
+      scheduleAndroidViewport(nextEmptyRegion);
       return;
     }
 
@@ -606,14 +645,15 @@ const DrawnMap = forwardRef<EventMapHandle, EventMapProps>(function DrawnMap(
       (geometryRegion.longitudeDelta * height) / availableWidth,
     );
 
-    map.animateToRegion(
-      {
-        ...geometryRegion,
-        latitudeDelta,
-        longitudeDelta: latitudeDelta * aspect,
-      },
-      CAMERA_DURATION,
-    );
+    const nextGeometryRegion = {
+      ...geometryRegion,
+      latitudeDelta,
+      longitudeDelta: latitudeDelta * aspect,
+    };
+
+    visibleRegion.current = nextGeometryRegion;
+    map.animateToRegion(nextGeometryRegion, CAMERA_DURATION);
+    scheduleAndroidViewport(nextGeometryRegion);
   }, [
     contentKey,
     fitPadding,
@@ -622,13 +662,17 @@ const DrawnMap = forwardRef<EventMapHandle, EventMapProps>(function DrawnMap(
     initialFocusLongitude,
     isReady,
     isCameraDriven,
+    scheduleAndroidViewport,
   ]);
 
   useEffect(() => {
     if (!isCameraDriven || !cameraToFollow || !isReady) return;
 
-    mapRef.current?.animateToRegion(regionForCoordinate(cameraToFollow), CAMERA_DURATION);
-  }, [isCameraDriven, cameraToFollow, isReady]);
+    const nextFollowRegion = regionForCoordinate(cameraToFollow);
+    visibleRegion.current = nextFollowRegion;
+    mapRef.current?.animateToRegion(nextFollowRegion, CAMERA_DURATION);
+    scheduleAndroidViewport(nextFollowRegion);
+  }, [isCameraDriven, cameraToFollow, isReady, scheduleAndroidViewport]);
 
   const handleRegionChangeComplete = useCallback(
     (region: Region) => {
@@ -638,6 +682,7 @@ const DrawnMap = forwardRef<EventMapHandle, EventMapProps>(function DrawnMap(
         latitudeDelta: region.latitudeDelta,
         longitudeDelta: region.longitudeDelta,
       };
+      scheduleAndroidViewport(region);
 
       // O mesmo callback termina reenquadramentos automáticos e zooms manuais.
       // Só consumir o próximo toque quando esta região é o destino do zoom ativo;
@@ -652,7 +697,9 @@ const DrawnMap = forwardRef<EventMapHandle, EventMapProps>(function DrawnMap(
         if (queuedRegion) {
           queuedZoomRegion.current = null;
           activeZoomRegion.current = queuedRegion;
+          visibleRegion.current = queuedRegion;
           mapRef.current?.animateToRegion(queuedRegion, CAMERA_DURATION);
+          scheduleAndroidViewport(queuedRegion);
         } else {
           zoomAnimationRunning.current = false;
           activeZoomRegion.current = null;
@@ -691,7 +738,7 @@ const DrawnMap = forwardRef<EventMapHandle, EventMapProps>(function DrawnMap(
       lastSettledCamera.current = center;
       onCameraSettled?.(center);
     },
-    [editable, editablePath, onCameraSettled],
+    [editable, editablePath, onCameraSettled, scheduleAndroidViewport],
   );
 
   /**
@@ -708,6 +755,7 @@ const DrawnMap = forwardRef<EventMapHandle, EventMapProps>(function DrawnMap(
         latitudeDelta: region.latitudeDelta,
         longitudeDelta: region.longitudeDelta,
       };
+      scheduleAndroidViewport(region);
 
       if (editable) {
         const rect = editable.rect;
@@ -772,7 +820,7 @@ const DrawnMap = forwardRef<EventMapHandle, EventMapProps>(function DrawnMap(
           .catch(() => undefined);
       });
     },
-    [editable, editablePath, pathDragging, pathHandles],
+    [editable, editablePath, pathDragging, pathHandles, scheduleAndroidViewport],
   );
 
   const handlePathDragStateChange = useCallback((dragging: boolean) => {
@@ -816,6 +864,9 @@ const DrawnMap = forwardRef<EventMapHandle, EventMapProps>(function DrawnMap(
 
     const didResize = size.current.width !== width || size.current.height !== height;
     size.current = { width, height };
+    if (Platform.OS === 'android') {
+      setAndroidSize({ width, height });
+    }
     setHasLayout(true);
     if (didResize) setCameraTick((tick) => tick + 1);
   }, []);
@@ -861,6 +912,8 @@ const DrawnMap = forwardRef<EventMapHandle, EventMapProps>(function DrawnMap(
       if (isRegionAtZoomTarget(nextRegion, current)) return;
 
       requestedZoomRegion.current = nextRegion;
+      visibleRegion.current = nextRegion;
+      scheduleAndroidViewport(nextRegion);
       if (zoomAnimationRunning.current) {
         queuedZoomRegion.current = nextRegion;
         return;
@@ -870,7 +923,26 @@ const DrawnMap = forwardRef<EventMapHandle, EventMapProps>(function DrawnMap(
       activeZoomRegion.current = nextRegion;
       map.animateToRegion(nextRegion, CAMERA_DURATION);
     },
-    [isCameraDriven],
+    [isCameraDriven, scheduleAndroidViewport],
+  );
+
+  const handleAndroidViewportChange = useCallback(
+    (nextViewport: MapViewport, settled: boolean) => {
+      const nextRegion: Region = {
+        latitude: nextViewport.center[0],
+        longitude: nextViewport.center[1],
+        latitudeDelta: nextViewport.latitudeDelta,
+        longitudeDelta: nextViewport.longitudeDelta,
+      };
+      visibleRegion.current = nextRegion;
+      setAndroidViewport(nextViewport);
+      if (settled) {
+        handleRegionChangeComplete(nextRegion);
+      } else {
+        handleRegionChange(nextRegion);
+      }
+    },
+    [handleRegionChange, handleRegionChangeComplete],
   );
 
   useImperativeHandle(
@@ -965,6 +1037,18 @@ const DrawnMap = forwardRef<EventMapHandle, EventMapProps>(function DrawnMap(
    */
   const projectCoordinate = useCallback(
     async (coordinate: Coordinate): Promise<ScreenPoint | null> => {
+      if (Platform.OS === 'android' && visibleRegion.current && size.current.width > 0 && size.current.height > 0) {
+        return mapToScreen(
+          coordinate,
+          {
+            center: [visibleRegion.current.latitude, visibleRegion.current.longitude],
+            latitudeDelta: visibleRegion.current.latitudeDelta,
+            longitudeDelta: visibleRegion.current.longitudeDelta,
+          },
+          size.current,
+        );
+      }
+
       const map = mapRef.current;
       if (!map) return null;
 
@@ -1142,6 +1226,22 @@ const DrawnMap = forwardRef<EventMapHandle, EventMapProps>(function DrawnMap(
         ))}
       </MapView>
 
+      {Platform.OS === 'android' && androidViewport && androidSize.width > 0 && androidSize.height > 0 ? (
+        <AndroidOsmOverlay
+          viewport={androidViewport}
+          size={androidSize}
+          markers={markers}
+          polylines={polylines}
+          rects={rects}
+          areas={areas}
+          userPosition={userPosition}
+          scrollEnabled={!pathDragging}
+          zoomEnabled={!pathDragging}
+          onViewportChange={handleAndroidViewportChange}
+          onMapPress={onMapPress}
+        />
+      ) : null}
+
       {editable && editable.onResize ? (
         <RectHandleOverlay
           points={handlePoints}
@@ -1207,7 +1307,434 @@ const containerVariants = tv({
 
 const styles = StyleSheet.create({
   map: { flex: 1 },
+  markerOverlay: { position: 'absolute', transform: [{ translateX: -18 }, { translateY: -18 }] },
 });
+
+type AndroidOsmOverlayProps = {
+  viewport: MapViewport;
+  size: ViewportSize;
+  markers: MapMarker[];
+  polylines: MapPolyline[];
+  rects: MapRect[];
+  areas: MapArea[];
+  userPosition: Coordinate | null;
+  scrollEnabled: boolean;
+  zoomEnabled: boolean;
+  onViewportChange: (viewport: MapViewport, settled: boolean) => void;
+  onMapPress?: (coordinate: Coordinate) => void;
+};
+
+const ANDROID_TAP_THRESHOLD_PX = 6;
+const ANDROID_MARKER_HIT_RADIUS_PX = 24;
+const ANDROID_POLYLINE_HIT_RADIUS_PX = 16;
+
+function AndroidOsmOverlay({
+  viewport,
+  size,
+  markers,
+  polylines,
+  rects,
+  areas,
+  userPosition,
+  scrollEnabled,
+  zoomEnabled,
+  onViewportChange,
+  onMapPress,
+}: AndroidOsmOverlayProps) {
+  const viewportRef = useRef(viewport);
+  const sizeRef = useRef(size);
+  const markersRef = useRef(markers);
+  const polylinesRef = useRef(polylines);
+  const scrollEnabledRef = useRef(scrollEnabled);
+  const zoomEnabledRef = useRef(zoomEnabled);
+  const onViewportChangeRef = useRef(onViewportChange);
+  const onMapPressRef = useRef(onMapPress);
+
+  useEffect(() => {
+    viewportRef.current = viewport;
+    sizeRef.current = size;
+    markersRef.current = markers;
+    polylinesRef.current = polylines;
+    scrollEnabledRef.current = scrollEnabled;
+    zoomEnabledRef.current = zoomEnabled;
+    onViewportChangeRef.current = onViewportChange;
+    onMapPressRef.current = onMapPress;
+  }, [
+    viewport,
+    size,
+    markers,
+    polylines,
+    scrollEnabled,
+    zoomEnabled,
+    onViewportChange,
+    onMapPress,
+  ]);
+
+  const gestureRef = useRef<{
+    kind: 'pan' | 'pinch' | 'drag-marker';
+    startLocal: ScreenPoint;
+    lastDx: number;
+    lastDy: number;
+    pinchLast?: { midPx: ScreenPoint; distance: number } | null;
+    didPinch?: boolean;
+    draggingMarker?: MapMarker | null;
+  } | null>(null);
+
+  // eslint-disable-next-line react-hooks/refs
+  const responder = PanResponder.create({
+    onStartShouldSetPanResponder: () => scrollEnabledRef.current || zoomEnabledRef.current,
+    onMoveShouldSetPanResponder: () => scrollEnabledRef.current || zoomEnabledRef.current,
+    onPanResponderGrant: (event: GestureResponderEvent) => {
+      const startLocal: ScreenPoint = {
+        x: event.nativeEvent.locationX,
+        y: event.nativeEvent.locationY,
+      };
+      const vp = viewportRef.current;
+      const frame = sizeRef.current;
+
+      if (event.nativeEvent.touches.length >= 2 && zoomEnabledRef.current) {
+        gestureRef.current = {
+          kind: 'pinch',
+          startLocal,
+          lastDx: 0,
+          lastDy: 0,
+          didPinch: true,
+        };
+        return;
+      }
+
+      for (let i = markersRef.current.length - 1; i >= 0; i -= 1) {
+        const marker = markersRef.current[i];
+        if (!marker?.onDrag) continue;
+        const pt = mapToScreen(marker.coordinate, vp, frame);
+        if (Math.hypot(startLocal.x - pt.x, startLocal.y - pt.y) <= ANDROID_MARKER_HIT_RADIUS_PX) {
+          gestureRef.current = {
+            kind: 'drag-marker',
+            startLocal,
+            lastDx: 0,
+            lastDy: 0,
+            draggingMarker: marker,
+          };
+          return;
+        }
+      }
+
+      gestureRef.current = {
+        kind: 'pan',
+        startLocal,
+        lastDx: 0,
+        lastDy: 0,
+      };
+    },
+    onPanResponderMove: (
+      event: GestureResponderEvent,
+      gestureState: PanResponderGestureState,
+    ) => {
+      const gesture = gestureRef.current;
+      const frame = sizeRef.current;
+      if (!gesture || frame.width <= 0 || frame.height <= 0) return;
+
+      const touches: readonly NativeTouchEvent[] = event.nativeEvent.touches;
+      if (touches.length >= 2 && zoomEnabledRef.current && touches[0] && touches[1]) {
+        const [first, second] = touches;
+        const midPx: ScreenPoint = {
+          x: (first.locationX + second.locationX) / 2,
+          y: (first.locationY + second.locationY) / 2,
+        };
+        const distance = Math.hypot(first.pageX - second.pageX, first.pageY - second.pageY);
+        gesture.kind = 'pinch';
+        gesture.didPinch = true;
+        if (!gesture.pinchLast) {
+          gesture.pinchLast = { midPx, distance };
+          return;
+        }
+        const last = gesture.pinchLast;
+        if (last.distance < 10 || distance < 10) return;
+        let next = zoomViewportAt(
+          viewportRef.current,
+          last.midPx,
+          last.distance / distance,
+          frame,
+        );
+        next = panViewport(next, midPx.x - last.midPx.x, midPx.y - last.midPx.y, frame);
+        const normalized = normalizeViewport(next, frame);
+        viewportRef.current = normalized;
+        onViewportChangeRef.current(normalized, false);
+        gesture.pinchLast = { midPx, distance };
+        return;
+      }
+
+      if (gesture.kind === 'pinch') {
+        gesture.kind = 'pan';
+        gesture.lastDx = gestureState.dx;
+        gesture.lastDy = gestureState.dy;
+        return;
+      }
+
+      if (gesture.kind === 'drag-marker' && gesture.draggingMarker?.onDrag) {
+        const local: ScreenPoint = {
+          x: gesture.startLocal.x + gestureState.dx,
+          y: gesture.startLocal.y + gestureState.dy,
+        };
+        const coord = screenToMap(local, viewportRef.current, frame);
+        if (coord) {
+          gesture.draggingMarker.onDrag(coord);
+        }
+        return;
+      }
+
+      if (gesture.kind === 'pan' && scrollEnabledRef.current) {
+        const next = normalizeViewport(
+          panViewport(
+            viewportRef.current,
+            gestureState.dx - gesture.lastDx,
+            gestureState.dy - gesture.lastDy,
+            frame,
+          ),
+          frame,
+        );
+        viewportRef.current = next;
+        onViewportChangeRef.current(next, false);
+        gesture.lastDx = gestureState.dx;
+        gesture.lastDy = gestureState.dy;
+      }
+    },
+    onPanResponderRelease: (
+      _event: GestureResponderEvent,
+      gestureState: PanResponderGestureState,
+    ) => {
+      const gesture = gestureRef.current;
+      gestureRef.current = null;
+      if (!gesture) return;
+
+      const frame = sizeRef.current;
+      const vp = viewportRef.current;
+      const isTap =
+        Math.max(Math.abs(gestureState.dx), Math.abs(gestureState.dy)) <
+        ANDROID_TAP_THRESHOLD_PX;
+
+      if (isTap && !gesture.didPinch) {
+        const local = gesture.startLocal;
+        for (let i = markersRef.current.length - 1; i >= 0; i -= 1) {
+          const marker = markersRef.current[i];
+          if (!marker?.onPress) continue;
+          const pt = mapToScreen(marker.coordinate, vp, frame);
+          if (Math.hypot(local.x - pt.x, local.y - pt.y) <= ANDROID_MARKER_HIT_RADIUS_PX) {
+            marker.onPress();
+            return;
+          }
+        }
+
+        for (let i = polylinesRef.current.length - 1; i >= 0; i -= 1) {
+          const polyline = polylinesRef.current[i];
+          if (!polyline?.onPress) continue;
+          const pts = validCoordinates(polyline.geometry).map((c) => mapToScreen(c, vp, frame));
+          if (isPointNearScreenPolyline(local, pts, ANDROID_POLYLINE_HIT_RADIUS_PX)) {
+            polyline.onPress();
+            return;
+          }
+        }
+
+        const coord = screenToMap(local, vp, frame);
+        if (coord) {
+          onMapPressRef.current?.(coord);
+        }
+        return;
+      }
+
+      onViewportChangeRef.current(vp, true);
+    },
+    onPanResponderTerminate: () => {
+      gestureRef.current = null;
+      onViewportChangeRef.current(viewportRef.current, true);
+    },
+  });
+
+  const tiles = useMemo(() => tilesForViewport(viewport, size), [viewport, size]);
+
+  const projectedAreas = useMemo(
+    () =>
+      areas.map((area) => ({
+        id: area.id,
+        points: validCoordinates(area.geometry)
+          .map((coord) => mapToScreen(coord, viewport, size))
+          .map((pt) => `${pt.x},${pt.y}`)
+          .join(' '),
+      })),
+    [areas, viewport, size],
+  );
+
+  const projectedRects = useMemo(
+    () =>
+      rects.map((item) => ({
+        id: item.id,
+        tone: item.tone ?? 'default',
+        points: rectCorners(item.rect)
+          .map((coord) => mapToScreen(coord, viewport, size))
+          .map((pt) => `${pt.x},${pt.y}`)
+          .join(' '),
+      })),
+    [rects, viewport, size],
+  );
+
+  const projectedPolylines = useMemo(
+    () =>
+      polylines.map((polyline) => ({
+        id: polyline.id,
+        tone: polyline.tone ?? 'default',
+        onPress: polyline.onPress,
+        points: validCoordinates(polyline.geometry)
+          .map((coord) => mapToScreen(coord, viewport, size))
+          .map((pt) => `${pt.x},${pt.y}`)
+          .join(' '),
+      })),
+    [polylines, viewport, size],
+  );
+
+  const projectedMarkers = useMemo(
+    () =>
+      markers.map((marker) => ({
+        marker,
+        point: mapToScreen(marker.coordinate, viewport, size),
+      })),
+    [markers, viewport, size],
+  );
+
+  const projectedUser = useMemo(
+    () => (userPosition ? mapToScreen(userPosition, viewport, size) : null),
+    [userPosition, viewport, size],
+  );
+
+  return (
+    <View style={StyleSheet.absoluteFill} {...responder.panHandlers}>
+      <Svg width="100%" height="100%" style={StyleSheet.absoluteFill} pointerEvents="none">
+        {tiles.map((tile) => (
+          <OsmTileImage key={`${tile.zoom}/${tile.x}/${tile.y}`} tile={tile} />
+        ))}
+
+        {projectedAreas.map((area) => (
+          <SvgPolygon
+            key={`area-${area.id}`}
+            points={area.points}
+            fill="rgba(99, 102, 241, 0.14)"
+            stroke={colors.primary}
+            strokeWidth={RECT_STROKE_WIDTH}
+          />
+        ))}
+
+        {projectedRects.map((rect) => (
+          <SvgPolygon
+            key={`rect-${rect.id}`}
+            points={rect.points}
+            fill={RECT_FILL_COLORS[rect.tone]}
+            stroke={TONE_COLORS[rect.tone]}
+            strokeWidth={RECT_STROKE_WIDTH}
+          />
+        ))}
+
+        {projectedPolylines.map((polyline) => (
+          <SvgPolyline
+            key={`poly-${polyline.id}`}
+            points={polyline.points}
+            fill="none"
+            stroke={TONE_COLORS[polyline.tone]}
+            strokeWidth={STROKE_WIDTH}
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          />
+        ))}
+
+        {projectedUser ? (
+          <>
+            <SvgCircle
+              cx={projectedUser.x}
+              cy={projectedUser.y}
+              r={10}
+              fill="rgba(59, 130, 246, 0.25)"
+            />
+            <SvgCircle
+              cx={projectedUser.x}
+              cy={projectedUser.y}
+              r={6}
+              fill={colors.primary}
+              stroke={colors.white}
+              strokeWidth={2}
+            />
+          </>
+        ) : null}
+      </Svg>
+
+      {projectedMarkers.map(({ marker, point }) => (
+        <View
+          key={`pin-${marker.id}`}
+          pointerEvents="none"
+          accessibilityLabel={describeMarker(marker)}
+          style={[styles.markerOverlay, { left: point.x, top: point.y }]}
+        >
+          <MapPin tone={marker.tone} icon={marker.icon} />
+        </View>
+      ))}
+    </View>
+  );
+}
+
+function isPointNearScreenPolyline(
+  point: ScreenPoint,
+  vertices: readonly ScreenPoint[],
+  radiusPx: number,
+): boolean {
+  for (let i = 1; i < vertices.length; i += 1) {
+    const a = vertices[i - 1];
+    const b = vertices[i];
+    if (!a || !b) continue;
+    const dx = b.x - a.x;
+    const dy = b.y - a.y;
+    const lengthSq = dx * dx + dy * dy;
+    const t =
+      lengthSq === 0
+        ? 0
+        : Math.max(0, Math.min(1, ((point.x - a.x) * dx + (point.y - a.y) * dy) / lengthSq));
+    const projX = a.x + t * dx;
+    const projY = a.y + t * dy;
+    if (Math.hypot(point.x - projX, point.y - projY) <= radiusPx) {
+      return true;
+    }
+  }
+  return false;
+}
+
+function OsmTileImage({ tile }: { tile: MapTile }) {
+  const [uri, setUri] = useState<string | null>(null);
+  const { zoom, x, y, href } = tile;
+
+  useEffect(() => {
+    let active = true;
+    void cachedMapTileUri({ zoom, x, y, href })
+      .then((cachedUri) => {
+        if (active) setUri(cachedUri);
+      })
+      .catch(() => {
+        if (active) setUri(null);
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [href, x, y, zoom]);
+
+  if (!uri) return null;
+
+  return (
+    <SvgImage
+      href={uri}
+      x={tile.rect.x}
+      y={tile.rect.y}
+      width={tile.rect.width}
+      height={tile.rect.height}
+      preserveAspectRatio="none"
+    />
+  );
+}
 
 /**
  * Todos os pontos do mapa, de marcadores, trajetos e retângulos, na ordem em que

@@ -1,8 +1,48 @@
-import { View, Pressable } from 'react-native';
+import { Pressable, View } from 'react-native';
 
+import { EventMap } from '@/components/map';
 import { Screen } from '@/components/screen';
-import { Text, Icon, IconButton } from '@/components/ui';
+import { Icon, Text } from '@/components/ui';
 import { colors } from '@/theme/tokens';
+import type { MapMarker, MapPolyline } from '@/types/map';
+
+const EXAMPLE_MARKERS: MapMarker[] = [
+  {
+    id: 'entrada',
+    coordinate: [-23.5621, -46.6564],
+    label: 'Entrada principal',
+    icon: 'entrance',
+    tone: 'default',
+  },
+  {
+    id: 'banheiro',
+    coordinate: [-23.5615, -46.6552],
+    label: 'Banheiro',
+    icon: 'human-wheelchair',
+    tone: 'default',
+  },
+  {
+    id: 'auditorio',
+    coordinate: [-23.5608, -46.6562],
+    label: 'Auditório Principal',
+    icon: 'map-marker',
+    tone: 'highlight',
+  },
+];
+
+const EXAMPLE_POLYLINES: MapPolyline[] = [
+  {
+    id: 'rota-entrada-auditorio',
+    geometry: [
+      [-23.5621, -46.6564],
+      [-23.5618, -46.6558],
+      [-23.5615, -46.6552],
+      [-23.5611, -46.6556],
+      [-23.5608, -46.6562],
+    ],
+    tone: 'highlight',
+  },
+];
 
 export default function MapaExemploScreen() {
   return (
@@ -11,38 +51,36 @@ export default function MapaExemploScreen() {
         <Text variant="label">Festival Cidade Aberta</Text>
       </View>
 
-      <View className="flex-1 items-center justify-center bg-gray-100">
-        <View className="absolute left-12 top-16 rounded-lg bg-white px-2 py-1 shadow-sm">
+      <View className="relative flex-1">
+        <EventMap
+          className="flex-1"
+          markers={EXAMPLE_MARKERS}
+          polylines={EXAMPLE_POLYLINES}
+          accessibilityLabel="Mapa de exemplo do Festival Cidade Aberta"
+          fitPadding={36}
+        />
+
+        <View
+          pointerEvents="none"
+          className="absolute left-4 top-4 rounded-lg bg-white/95 px-2.5 py-1.5 shadow-sm"
+        >
           <Text variant="caption">Auditório</Text>
           <Text variant="caption" tint="muted">
             Principal
           </Text>
         </View>
-        <View className="absolute right-10 top-40 flex-row items-center gap-1 rounded-lg bg-white px-2 py-1 shadow-sm">
+        <View
+          pointerEvents="none"
+          className="absolute right-16 top-16 flex-row items-center gap-1 rounded-lg bg-white/95 px-2.5 py-1.5 shadow-sm"
+        >
           <Icon name="wheelchair-accessibility" size={20} color={colors.primary} />
           <Text variant="caption">Banheiro</Text>
         </View>
-        <View className="absolute bottom-40 left-8 rounded-lg bg-white px-2 py-1 shadow-sm">
+        <View
+          pointerEvents="none"
+          className="absolute bottom-14 left-4 rounded-lg bg-white/95 px-2.5 py-1.5 shadow-sm"
+        >
           <Text variant="caption">↗ Entrada</Text>
-        </View>
-        <View className="h-8 w-8 items-center justify-center rounded-full bg-primary">
-          <Icon name="map-marker" size={20} color={colors.white} />
-        </View>
-        <View className="absolute right-2 top-2 flex-row gap-1 rounded-lg border border-border bg-background p-1 shadow-sm">
-          <IconButton
-            icon="plus"
-            size="sm"
-            accessibilityLabel="Aumentar o mapa"
-            onPress={() => undefined}
-            testID="map-zoom-in"
-          />
-          <IconButton
-            icon="minus"
-            size="sm"
-            accessibilityLabel="Reduzir o mapa"
-            onPress={() => undefined}
-            testID="map-zoom-out"
-          />
         </View>
       </View>
 

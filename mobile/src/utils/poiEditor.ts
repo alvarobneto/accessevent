@@ -62,12 +62,14 @@ export type AreaDraft = {
   poiId: string | null;
 };
 
-/** Um ponto colocado dentro de uma área. */
+/** Um ponto colocado dentro de uma área (ou diretamente no mapa). */
 export type PoiDraft = {
   id: string;
   kind: PoiKind;
   position: Coordinate;
   areaId: string;
+  name?: string;
+  description?: string | null;
   /** Escala visual do marcador no mapa; local ao protótipo. */
   markerScale?: number;
 };
@@ -118,7 +120,7 @@ export type PoiEditorState = {
 export type PoiEditorAction =
   | { type: 'select-tool'; tool: ActiveTool }
   | { type: 'arm-poi'; kind: PoiKind }
-  | { type: 'place-poi'; position: Coordinate }
+  | { type: 'place-poi'; position: Coordinate; allowOutsideAreas?: boolean }
   | { type: 'swap-poi'; areaId: string; kind: PoiKind }
   | { type: 'drop-area'; kind: AreaKind; geometry: AreaRing }
   | { type: 'select-area'; areaId: string | null }
@@ -127,6 +129,8 @@ export type PoiEditorAction =
   | { type: 'commit-edit-area'; areaId: string; geometry: AreaRing }
   | { type: 'update-area-details'; areaId: string; name: string; areaType: AreaType; description: string | null }
   | { type: 'persist-area-id'; areaId: string; persistedId: string }
+  | { type: 'update-poi-details'; poiId: string; name: string; kind: PoiKind; description: string | null }
+  | { type: 'persist-poi-id'; poiId: string; persistedId: string }
   | { type: 'commit-move-poi'; poiId: string; position: Coordinate }
   | { type: 'resize-poi-marker'; poiId: string; scale: number }
   | { type: 'set-interaction'; interaction: EditorInteraction }
@@ -160,10 +164,13 @@ const MAX_HISTORY = 30;
 /** Invariante do desenho: ponto fora das áreas não existe. */
 const ALLOW_POI_OUTSIDE_AREAS = false;
 
-export function createInitialEditorState(areas: AreaDraft[] = []): PoiEditorState {
+export function createInitialEditorState(
+  areas: AreaDraft[] = [],
+  pois: PoiDraft[] = [],
+): PoiEditorState {
   return {
     areas,
-    pois: [],
+    pois,
     selectedAreaId: null,
     selectedPoiId: null,
     activeTool: 'none',
@@ -183,7 +190,7 @@ export function poiEditorReducer(state: PoiEditorState, action: PoiEditorAction)
       return armPoi(state, action.kind);
 
     case 'place-poi':
-      return placePoi(state, action.position);
+      return placePoi(state, action.position, action.allowOutsideAreas);
 
     case 'swap-poi':
       return swapAreaItem(state, action.areaId, action.kind);
@@ -218,6 +225,12 @@ export function poiEditorReducer(state: PoiEditorState, action: PoiEditorAction)
 
     case 'persist-area-id':
       return persistAreaId(state, action.areaId, action.persistedId);
+
+    case 'update-poi-details':
+      return updatePoiDetails(state, action);
+
+    case 'persist-poi-id':
+      return persistPoiId(state, action.poiId, action.persistedId);
 
     case 'commit-move-poi':
       return movePoi(state, action.poiId, action.position);
@@ -266,13 +279,30 @@ function armPoi(state: PoiEditorState, kind: PoiKind): PoiEditorState {
   };
 }
 
-function placePoi(state: PoiEditorState, position: Coordinate): PoiEditorState {
+function placePoi(
+  state: PoiEditorState,
+  position: Coordinate,
+  allowOutsideAreas = ALLOW_POI_OUTSIDE_AREAS,
+): PoiEditorState {
   if (!state.armedPoiKind) return state;
 
   const area = topmostAreaAt(state.areas, position);
   if (!area) {
-    if (ALLOW_POI_OUTSIDE_AREAS) return state;
-    return withFeedback(state, editorFeedback.poiOutsideAreas);
+    if (!allowOutsideAreas) {
+      return withFeedback(state, editorFeedback.poiOutsideAreas);
+    }
+
+    const poi = createPoi(state.armedPoiKind, position, '');
+    const next: PoiEditorState = {
+      ...state,
+      pois: [...state.pois, poi],
+      selectedPoiId: poi.id,
+      selectedAreaId: null,
+      armedPoiKind: null,
+      interaction: 'idle',
+    };
+
+    return withFeedback(commit(state, next), editorFeedback.poiPlaced(poiLabel(poi.kind)));
   }
 
   const existing = state.pois.find((poi) => poi.id === area.poiId);
@@ -397,15 +427,68 @@ function updateAreaDetails(
 /** Troca o id temporário pelo id da API em estado atual e histórico de desfazer. */
 function persistAreaId(state: PoiEditorState, areaId: string, persistedId: string): PoiEditorState {
   const replace = (area: AreaDraft) => (area.id === areaId ? { ...area, id: persistedId } : area);
+  const replacePoi = (poi: PoiDraft) =>
+    poi.areaId === areaId ? { ...poi, areaId: persistedId } : poi;
   const replaceSnapshot = (snapshot: PoiEditorSnapshot): PoiEditorSnapshot => ({
     ...snapshot,
     areas: snapshot.areas.map(replace),
+    pois: snapshot.pois.map(replacePoi),
   });
 
   return {
     ...state,
     areas: state.areas.map(replace),
+    pois: state.pois.map(replacePoi),
     selectedAreaId: state.selectedAreaId === areaId ? persistedId : state.selectedAreaId,
+    history: state.history.map(replaceSnapshot),
+  };
+}
+
+function updatePoiDetails(
+  state: PoiEditorState,
+  action: Extract<PoiEditorAction, { type: 'update-poi-details' }>,
+): PoiEditorState {
+  const poi = state.pois.find((candidate) => candidate.id === action.poiId);
+  if (!poi) return state;
+  if (
+    (poi.name ?? '') === action.name &&
+    poi.kind === action.kind &&
+    (poi.description ?? null) === action.description
+  ) {
+    return state;
+  }
+
+  const next: PoiEditorState = {
+    ...state,
+    pois: state.pois.map((candidate) =>
+      candidate.id === action.poiId
+        ? {
+            ...candidate,
+            name: action.name,
+            kind: action.kind,
+            description: action.description,
+          }
+        : candidate,
+    ),
+  };
+  return commit(state, next);
+}
+
+function persistPoiId(state: PoiEditorState, poiId: string, persistedId: string): PoiEditorState {
+  const replacePoi = (poi: PoiDraft) => (poi.id === poiId ? { ...poi, id: persistedId } : poi);
+  const replaceAreaPoi = (area: AreaDraft) =>
+    area.poiId === poiId ? { ...area, poiId: persistedId } : area;
+  const replaceSnapshot = (snapshot: PoiEditorSnapshot): PoiEditorSnapshot => ({
+    ...snapshot,
+    areas: snapshot.areas.map(replaceAreaPoi),
+    pois: snapshot.pois.map(replacePoi),
+  });
+
+  return {
+    ...state,
+    areas: state.areas.map(replaceAreaPoi),
+    pois: state.pois.map(replacePoi),
+    selectedPoiId: state.selectedPoiId === poiId ? persistedId : state.selectedPoiId,
     history: state.history.map(replaceSnapshot),
   };
 }
@@ -436,14 +519,16 @@ function movePoi(state: PoiEditorState, poiId: string, position: Coordinate): Po
   const poi = state.pois.find((candidate) => candidate.id === poiId);
   if (!poi) return state;
 
-  const area = state.areas.find((candidate) => candidate.id === poi.areaId);
-  const bounds = area ? boundsOfRing(area.geometry) : null;
-  if (!area || !bounds) {
-    return withFeedback(state, editorFeedback.poiMovedOut);
-  }
+  if (poi.areaId) {
+    const area = state.areas.find((candidate) => candidate.id === poi.areaId);
+    const bounds = area ? boundsOfRing(area.geometry) : null;
+    if (!area || !bounds) {
+      return withFeedback(state, editorFeedback.poiMovedOut);
+    }
 
-  if (!pointInBounds(position, bounds)) {
-    return withFeedback(state, editorFeedback.poiMovedOut);
+    if (!pointInBounds(position, bounds)) {
+      return withFeedback(state, editorFeedback.poiMovedOut);
+    }
   }
 
   const pois = state.pois.map((candidate) =>

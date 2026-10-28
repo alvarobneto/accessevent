@@ -312,9 +312,9 @@ export const MapCanvas = forwardRef<MapCanvasHandle, MapCanvasProps>(function Ma
     if (!coord) return;
 
     // Um tipo armado tem prioridade sobre os marcadores existentes: tocar em uma
-    // área com um tipo selecionado coloca ou troca o item nesse local.
+    // área ou no mapa com um tipo selecionado coloca ou troca o item nesse local.
     if (st.armedPoiKind) {
-      dispatch({ type: 'place-poi', position: coord });
+      dispatch({ type: 'place-poi', position: coord, allowOutsideAreas: true });
       return;
     }
 
@@ -405,6 +405,23 @@ export const MapCanvas = forwardRef<MapCanvasHandle, MapCanvasProps>(function Ma
       return;
     }
 
+    const area = selectedArea(st);
+    if (area && st.activeTool === 'none' && !st.armedPoiKind) {
+      for (let i = 0; i < area.geometry.length; i += 1) {
+        const vertex = mapToScreen(area.geometry[i], vp, frame);
+        if (!vertex) continue;
+        if (pointDistance(startLocal, vertex) <= VERTEX_TOLERANCE_PX) {
+          const gesture = gestureRef.current;
+          gesture.kind = 'edit-vertex';
+          gesture.areaId = area.id;
+          gesture.geometry = area.geometry;
+          gesture.vertexIndex = i;
+          dispatch({ type: 'set-interaction', interaction: 'edit-area' });
+          return;
+        }
+      }
+    }
+
     const selected = selectedPoi(st);
     if (selected) {
       const center = mapToScreen(selected.position, vp, frame);
@@ -435,11 +452,11 @@ export const MapCanvas = forwardRef<MapCanvasHandle, MapCanvasProps>(function Ma
         projected &&
         pointDistance(startLocal, projected) <= POI_TOLERANCE_PX * (poi.markerScale ?? 1)
       ) {
-        const area = st.areas.find((candidate) => candidate.id === poi.areaId) ?? null;
+        const poiArea = st.areas.find((candidate) => candidate.id === poi.areaId) ?? null;
         const gesture = gestureRef.current;
         gesture.kind = 'move-poi';
         gesture.poiId = poi.id;
-        gesture.areaBounds = area ? boundsOfRing(area.geometry) : null;
+        gesture.areaBounds = poiArea ? boundsOfRing(poiArea.geometry) : null;
         dispatch({ type: 'select-poi', poiId: poi.id });
         dispatch({ type: 'set-interaction', interaction: 'move-poi' });
         return;
@@ -450,22 +467,7 @@ export const MapCanvas = forwardRef<MapCanvasHandle, MapCanvasProps>(function Ma
     // sob o dedo acima continua podendo ser reposicionado diretamente.
     if (st.armedPoiKind) return;
 
-    const area = selectedArea(st);
     if (area && st.activeTool === 'none') {
-      for (let i = 0; i < area.geometry.length; i += 1) {
-        const vertex = mapToScreen(area.geometry[i], vp, frame);
-        if (!vertex) continue;
-        if (pointDistance(startLocal, vertex) <= VERTEX_TOLERANCE_PX) {
-          const gesture = gestureRef.current;
-          gesture.kind = 'edit-vertex';
-          gesture.areaId = area.id;
-          gesture.geometry = area.geometry;
-          gesture.vertexIndex = i;
-          dispatch({ type: 'set-interaction', interaction: 'edit-area' });
-          return;
-        }
-      }
-
       const coord = screenToMap(startLocal, vp, frame);
       if (coord && pointInRing(coord, area.geometry)) {
         const gesture = gestureRef.current;
@@ -1032,6 +1034,7 @@ function drawingBounds(context: MapCanvasContext | undefined, state: PoiEditorSt
     ...(context?.paths ?? []),
     ...(context?.rects.map((rect) => rectCorners(rect)) ?? []),
     ...(context?.pois.map((poi) => [poi.position]) ?? []),
+    ...state.pois.map((poi) => [poi.position]),
     ...state.areas.map((area) => area.geometry),
   ];
   const bounds = rings.map(boundsOfRing).filter((b): b is CoordinateBounds => b !== null);

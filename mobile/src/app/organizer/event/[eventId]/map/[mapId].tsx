@@ -16,7 +16,7 @@ import { useAsyncData } from '@/hooks/useAsyncData';
 import { useMapGestureNavigation } from '@/hooks/useMapGestureNavigation';
 import { useRefreshOnFocus } from '@/hooks/useRefreshOnFocus';
 import { colors } from '@/theme/tokens';
-import { markersFromPois, polygonsFromAreas, polylinesFromPaths, rectsFromPois } from '@/utils/mapContent';
+import { markersFromPois, polygonsFromAreas, polylinesFromPaths } from '@/utils/mapContent';
 
 /**
  * Listas vazias com identidade estável.
@@ -129,7 +129,6 @@ export default function ManageNavigationMapScreen() {
       })),
     [pois, openPoiEditor],
   );
-  const rects = useMemo(() => rectsFromPois(pois), [pois]);
 
   const mapAccessibilityLabel = [
     'Mapa da navegação',
@@ -190,7 +189,6 @@ export default function ManageNavigationMapScreen() {
                         className="h-full rounded-lg border border-border"
                         markers={markers}
                         polylines={polylines}
-                        rects={rects}
                         areas={polygonsFromAreas(areas)}
                         accessibilityLabel={mapAccessibilityLabel}
                         fitPadding={12}

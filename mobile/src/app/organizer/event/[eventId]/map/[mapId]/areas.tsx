@@ -1,5 +1,5 @@
 import { Stack, router, useLocalSearchParams } from 'expo-router';
-import { useMemo, useReducer, useRef, useState } from 'react';
+import { useEffect, useMemo, useReducer, useRef, useState } from 'react';
 import { Pressable, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -15,18 +15,25 @@ import {
 import { Screen } from '@/components/screen';
 import { Alert, Button, Card, Dialog, EmptyState, Icon, Input, Text } from '@/components/ui';
 import { repository } from '@/data';
-import type { Area, AreaType, Path, PointOfInterest } from '@/data/types';
+import type { Area, AreaType, Path, PoiType, PointOfInterest } from '@/data/types';
 import { useAsyncData } from '@/hooks/useAsyncData';
 import { useMapGestureNavigation } from '@/hooks/useMapGestureNavigation';
 import { colors } from '@/theme/tokens';
-import type { AreaRing } from '@/utils/areaGeometry';
+import { topmostAreaAt, type AreaRing } from '@/utils/areaGeometry';
 import { toErrorMessage } from '@/utils/errors';
-import { poiIcon } from '@/utils/poiIcons';
+import { CENTER_ANCHOR, rectFromCenter } from '@/utils/poiAnchor';
 import {
+  POI_KIND_META,
+  POI_KIND_ORDER,
   createInitialEditorState,
   poiEditorReducer,
+  poiInArea,
+  poiLabel,
   selectedArea,
+  selectedPoi,
   type AreaDraft,
+  type PoiDraft,
+  type PoiKind,
 } from '@/utils/poiEditor';
 
 const AREA_TYPES: { value: AreaType; label: string }[] = [
@@ -37,6 +44,30 @@ const AREA_TYPES: { value: AreaType; label: string }[] = [
   { value: 'auditorio', label: 'Auditório' },
   { value: 'outro', label: 'Outro' },
 ];
+
+const KIND_TO_POI_TYPE: Record<PoiKind, PoiType> = {
+  entrance: 'Entrada',
+  exit: 'Saída',
+  bathroom: 'Banheiro',
+  stairs: 'Escada',
+  elevator: 'Elevador',
+  reception: 'Atendimento',
+  accessibility: 'Banheiro acessível',
+};
+
+function poiTypeToKind(type: PoiType, name: string): PoiKind {
+  const lower = name.trim().toLowerCase();
+  if (type === 'Entrada') return 'entrance';
+  if (type === 'Saída') return 'exit';
+  if (type === 'Banheiro') return 'bathroom';
+  if (type === 'Escada') return 'stairs';
+  if (type === 'Elevador') return 'elevator';
+  if (type === 'Atendimento' || lower.includes('recep')) return 'reception';
+  if (type === 'Banheiro acessível' || type === 'Rampa' || lower.includes('acess')) {
+    return 'accessibility';
+  }
+  return 'reception';
+}
 
 type AreaEditorData = { areas: Area[]; paths: Path[]; pois: PointOfInterest[] };
 
@@ -103,29 +134,38 @@ function AreaEditor({
 }: AreaEditorProps) {
   const canvasRef = useRef<MapCanvasHandle>(null);
   const insets = useSafeAreaInsets();
-  const initialDrafts = useMemo(() => initialAreas.map(toAreaDraft), [initialAreas]);
-  const [state, dispatch] = useReducer(poiEditorReducer, initialDrafts, createInitialEditorState);
+  const initialEditorSeed = useMemo(() => buildInitialEditorSeed(initialAreas, pois), [initialAreas, pois]);
+  const [state, dispatch] = useReducer(
+    poiEditorReducer,
+    initialEditorSeed,
+    (seed) => createInitialEditorState(seed.areas, seed.pois),
+  );
   const area = selectedArea(state);
+  const poi = selectedPoi(state);
   const [savedAreas, setSavedAreas] = useState(initialAreas);
+  const [savedPois, setSavedPois] = useState(pois);
   const [name, setName] = useState('');
   const [areaType, setAreaType] = useState<AreaType>('outro');
   const [description, setDescription] = useState('');
+  const [poiName, setPoiName] = useState('');
+  const [poiKind, setPoiKind] = useState<PoiKind>('entrance');
+  const [poiDescription, setPoiDescription] = useState('');
   const [isSaving, setIsSaving] = useState(false);
+  const [isSavingPoi, setIsSavingPoi] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
+  const [deletePoiOpen, setDeletePoiOpen] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
+  const [isDeletingPoi, setIsDeletingPoi] = useState(false);
   const [validationError, setValidationError] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [feedback, setFeedback] = useState<string | null>(null);
+  const [poiError, setPoiError] = useState<string | null>(null);
+  const [poiFeedback, setPoiFeedback] = useState<string | null>(null);
 
   const selectedSignature = area
     ? `${area.id}|${area.name}|${area.type}|${area.description ?? ''}`
     : '';
 
-  // Ajusta os campos quando a seleção (ou os dados persistidos da área
-  // selecionada) muda. É o padrão de "ajustar estado quando uma entrada muda" —
-  // no render, não num efeito, para não disparar um render em cascata. A
-  // assinatura só muda quando a seleção ou os detalhes salvos mudam: mover um
-  // vértice não pode apagar o que o organizador está digitando.
   const [syncedSignature, setSyncedSignature] = useState(selectedSignature);
 
   if (syncedSignature !== selectedSignature) {
@@ -138,19 +178,90 @@ function AreaEditor({
     setFeedback(null);
   }
 
+  const selectedPoiSignature = poi
+    ? `${poi.id}|${poi.kind}|${poi.name ?? ''}|${poi.description ?? ''}`
+    : '';
+  const [syncedPoiSignature, setSyncedPoiSignature] = useState(selectedPoiSignature);
+
+  if (syncedPoiSignature !== selectedPoiSignature) {
+    setSyncedPoiSignature(selectedPoiSignature);
+    setPoiName(poi ? (poi.name?.trim() || poiLabel(poi.kind)) : '');
+    setPoiKind(poi?.kind ?? 'entrance');
+    setPoiDescription(poi?.description ?? '');
+    setPoiError(null);
+    setPoiFeedback(null);
+  }
+
   const context = useMemo(
     () => ({
       paths: paths.map((path) => path.geometry),
-      pois: pois.map((poi) => ({
-        id: poi.id,
-        position: poi.position,
-        icon: poiIcon(poi.type),
-        label: poi.name,
-      })),
-      rects: pois.map((poi) => poi.rect),
+      pois: [],
+      rects: [],
     }),
-    [paths, pois],
+    [paths],
   );
+
+  const pendingGeometrySyncRef = useRef(new Map<string, string>());
+  const pendingPoiPositionSyncRef = useRef(new Map<string, string>());
+
+  useEffect(() => {
+    for (const draft of state.areas) {
+      const existing = savedAreas.find((candidate) => candidate.id === draft.id);
+      if (!existing) continue;
+      const nextSerialized = JSON.stringify(draft.geometry);
+      if (JSON.stringify(existing.geometry) === nextSerialized) {
+        pendingGeometrySyncRef.current.delete(draft.id);
+        continue;
+      }
+      if (pendingGeometrySyncRef.current.get(draft.id) === nextSerialized) {
+        continue;
+      }
+      pendingGeometrySyncRef.current.set(draft.id, nextSerialized);
+      void repository
+        .updateArea(existing.id, { geometry: draft.geometry })
+        .then((updated) => {
+          setSavedAreas((current) =>
+            current.map((candidate) => (candidate.id === updated.id ? updated : candidate)),
+          );
+          setFeedback('Formato da área salvo no mapa.');
+        })
+        .catch((cause) => {
+          pendingGeometrySyncRef.current.delete(draft.id);
+          setError(toErrorMessage(cause, 'Não foi possível salvar a mudança de forma da área.'));
+        });
+    }
+  }, [savedAreas, state.areas]);
+
+  useEffect(() => {
+    for (const draft of state.pois) {
+      const existing = savedPois.find((candidate) => candidate.id === draft.id);
+      if (!existing) continue;
+      const nextSerialized = JSON.stringify(draft.position);
+      if (JSON.stringify(existing.position) === nextSerialized) {
+        pendingPoiPositionSyncRef.current.delete(draft.id);
+        continue;
+      }
+      if (pendingPoiPositionSyncRef.current.get(draft.id) === nextSerialized) {
+        continue;
+      }
+      pendingPoiPositionSyncRef.current.set(draft.id, nextSerialized);
+      void repository
+        .updatePoi(existing.id, {
+          rect: rectFromCenter(draft.position),
+          anchor: CENTER_ANCHOR,
+        })
+        .then((updated) => {
+          setSavedPois((current) =>
+            current.map((candidate) => (candidate.id === updated.id ? updated : candidate)),
+          );
+          setPoiFeedback('Posição do ponto salva no mapa.');
+        })
+        .catch((cause) => {
+          pendingPoiPositionSyncRef.current.delete(draft.id);
+          setPoiError(toErrorMessage(cause, 'Não foi possível salvar a nova posição do ponto.'));
+        });
+    }
+  }, [savedPois, state.pois]);
 
   // Recupera o enquadramento do editor lembrado: o mapa ocupa cerca de 90% da
   // área útil e a legenda começa logo abaixo, mantendo os dados editáveis no scroll.
@@ -163,17 +274,74 @@ function AreaEditor({
     if (!area) return false;
     const saved = savedAreas.find((candidate) => candidate.id === area.id);
     if (!saved) return true;
+    const innerPoi = poiInArea(state, area.id);
+    const innerPoiUnsaved = innerPoi
+      ? !savedPois.some((candidate) => candidate.id === innerPoi.id)
+      : false;
     return (
+      innerPoiUnsaved ||
       saved.name !== name.trim() ||
       saved.type !== areaType ||
       (saved.description ?? '') !== (description.trim() || '') ||
       JSON.stringify(saved.geometry) !== JSON.stringify(area.geometry)
     );
-  }, [area, areaType, description, name, savedAreas]);
+  }, [area, areaType, description, name, savedAreas, savedPois, state]);
+
+  const isPoiDirty = useMemo(() => {
+    if (!poi) return false;
+    const saved = savedPois.find((candidate) => candidate.id === poi.id);
+    if (!saved) return true;
+    const targetName = poiName.trim() || poiLabel(poiKind);
+    const targetType = KIND_TO_POI_TYPE[poiKind];
+    return (
+      saved.name !== targetName ||
+      saved.type !== targetType ||
+      (saved.description ?? '') !== (poiDescription.trim() || '') ||
+      JSON.stringify(saved.position) !== JSON.stringify(poi.position)
+    );
+  }, [poi, poiDescription, poiKind, poiName, savedPois]);
+
+  const persistPoiDraft = async (draft: PoiDraft, customName?: string, customKind?: PoiKind, customDesc?: string | null) => {
+    const kindToUse = customKind ?? draft.kind;
+    const typeToUse = KIND_TO_POI_TYPE[kindToUse];
+    const nameToUse = (customName ?? draft.name ?? '').trim() || poiLabel(kindToUse);
+    const descToUse = customDesc !== undefined ? customDesc : (draft.description ?? null);
+    const existingPoi = savedPois.find((candidate) => candidate.id === draft.id);
+    const payload = {
+      name: nameToUse,
+      type: typeToUse,
+      rect: rectFromCenter(draft.position),
+      anchor: CENTER_ANCHOR,
+      description: descToUse,
+    };
+
+    const saved = existingPoi
+      ? await repository.updatePoi(existingPoi.id, payload)
+      : await repository.createPoi({ mapId, ...payload });
+
+    if (!existingPoi && saved.id !== draft.id) {
+      dispatch({ type: 'persist-poi-id', poiId: draft.id, persistedId: saved.id });
+    }
+    dispatch({
+      type: 'update-poi-details',
+      poiId: saved.id,
+      name: saved.name,
+      kind: kindToUse,
+      description: saved.description,
+    });
+    setSavedPois((current) =>
+      existingPoi
+        ? current.map((candidate) => (candidate.id === saved.id ? saved : candidate))
+        : [...current, saved],
+    );
+    return saved;
+  };
 
   const handleSave = async () => {
     if (!area) return;
-    if (!name.trim()) {
+    const innerPoi = poiInArea(state, area.id);
+    const resolvedName = name.trim() || (innerPoi ? poiLabel(innerPoi.kind) : '');
+    if (!resolvedName) {
       setValidationError('Informe um nome para a área.');
       return;
     }
@@ -184,7 +352,7 @@ function AreaEditor({
     setFeedback(null);
 
     const changes = {
-      name: name.trim(),
+      name: resolvedName,
       type: areaType,
       geometry: area.geometry,
       description: description.trim() || null,
@@ -211,11 +379,76 @@ function AreaEditor({
           ? current.map((candidate) => (candidate.id === saved.id ? saved : candidate))
           : [...current, saved],
       );
-      setFeedback('Área salva no mapa.');
+
+      if (innerPoi) {
+        await persistPoiDraft(innerPoi);
+      }
+
+      setFeedback(innerPoi ? 'Área e ponto de interesse salvos no mapa.' : 'Área salva no mapa.');
     } catch (cause) {
       setError(toErrorMessage(cause, 'Não foi possível salvar a área.'));
     } finally {
       setIsSaving(false);
+    }
+  };
+
+  const handleSavePoi = async () => {
+    if (!poi) return;
+    setIsSavingPoi(true);
+    setPoiError(null);
+    setPoiFeedback(null);
+
+    try {
+      if (poi.areaId) {
+        const parentArea = state.areas.find((candidate) => candidate.id === poi.areaId);
+        const existingParent = parentArea
+          ? savedAreas.find((candidate) => candidate.id === parentArea.id)
+          : undefined;
+        if (parentArea && !existingParent) {
+          const fallbackAreaName = parentArea.name.trim() || poiName.trim() || poiLabel(poiKind);
+          const savedArea = await repository.createArea({
+            mapId,
+            name: fallbackAreaName,
+            type: parentArea.type,
+            geometry: parentArea.geometry,
+            description: parentArea.description,
+          });
+          if (savedArea.id !== parentArea.id) {
+            dispatch({ type: 'persist-area-id', areaId: parentArea.id, persistedId: savedArea.id });
+          }
+          dispatch({
+            type: 'update-area-details',
+            areaId: savedArea.id,
+            name: savedArea.name,
+            areaType: savedArea.type,
+            description: savedArea.description,
+          });
+          setSavedAreas((current) => [...current, savedArea]);
+        } else if (
+          parentArea &&
+          existingParent &&
+          JSON.stringify(existingParent.geometry) !== JSON.stringify(parentArea.geometry)
+        ) {
+          const updatedArea = await repository.updateArea(existingParent.id, {
+            geometry: parentArea.geometry,
+          });
+          setSavedAreas((current) =>
+            current.map((candidate) => (candidate.id === updatedArea.id ? updatedArea : candidate)),
+          );
+        }
+      }
+
+      await persistPoiDraft(
+        poi,
+        poiName.trim() || poiLabel(poiKind),
+        poiKind,
+        poiDescription.trim() || null,
+      );
+      setPoiFeedback('Ponto de interesse salvo no mapa.');
+    } catch (cause) {
+      setPoiError(toErrorMessage(cause, 'Não foi possível salvar o ponto de interesse.'));
+    } finally {
+      setIsSavingPoi(false);
     }
   };
 
@@ -224,6 +457,10 @@ function AreaEditor({
     setIsDeleting(true);
     setError(null);
     try {
+      if (area.poiId && savedPois.some((candidate) => candidate.id === area.poiId)) {
+        await repository.deletePoi(area.poiId);
+        setSavedPois((current) => current.filter((candidate) => candidate.id !== area.poiId));
+      }
       if (savedAreas.some((candidate) => candidate.id === area.id)) {
         await repository.deleteArea(area.id);
         setSavedAreas((current) => current.filter((candidate) => candidate.id !== area.id));
@@ -235,6 +472,25 @@ function AreaEditor({
       setError(toErrorMessage(cause, 'Não foi possível remover a área.'));
     } finally {
       setIsDeleting(false);
+    }
+  };
+
+  const confirmDeletePoi = async () => {
+    if (!poi) return;
+    setIsDeletingPoi(true);
+    setPoiError(null);
+    try {
+      if (savedPois.some((candidate) => candidate.id === poi.id)) {
+        await repository.deletePoi(poi.id);
+        setSavedPois((current) => current.filter((candidate) => candidate.id !== poi.id));
+      }
+      dispatch({ type: 'remove-selection' });
+      setDeletePoiOpen(false);
+      setPoiFeedback('Ponto de interesse removido do mapa.');
+    } catch (cause) {
+      setPoiError(toErrorMessage(cause, 'Não foi possível remover o ponto de interesse.'));
+    } finally {
+      setIsDeletingPoi(false);
     }
   };
 
@@ -264,7 +520,12 @@ function AreaEditor({
                 onUndo={() => dispatch({ type: 'undo' })}
               />
               <MapActions
-                canFit={state.areas.length > 0 || paths.length > 0 || pois.length > 0}
+                canFit={
+                  state.areas.length > 0 ||
+                  state.pois.length > 0 ||
+                  paths.length > 0 ||
+                  savedPois.length > 0
+                }
                 onZoomIn={() => canvasRef.current?.zoomIn()}
                 onZoomOut={() => canvasRef.current?.zoomOut()}
                 onFit={() => canvasRef.current?.fitToAreas()}
@@ -281,8 +542,155 @@ function AreaEditor({
       <PoiMapLegend />
 
       <Text variant="caption">
-        Desenhe uma região no mapa. Você pode mover o contorno ou ajustar seus vértices antes de salvar.
+        Desenhe uma região ou escolha um ícone no topo e toque no mapa para posicionar. Depois, salve nos cartões abaixo.
       </Text>
+
+      <Card
+        title="Pontos de interesse cadastrados"
+        subtitle="Selecione um ícone para editar ou salvar no mapa."
+      >
+        {state.pois.length === 0 ? (
+          <EmptyState
+            compact
+            icon="map-marker-outline"
+            title="Nenhum ponto de interesse no mapa"
+            description="Toque em um ícone no topo do mapa (como Banheiro ou Recepção) e depois toque no mapa."
+          />
+        ) : (
+          <View className="gap-2">
+            {state.pois.map((item) => {
+              const label = item.name?.trim() || poiLabel(item.kind);
+              const isSelected = state.selectedPoiId === item.id;
+              return (
+                <Pressable
+                  key={item.id}
+                  onPress={() => dispatch({ type: 'select-poi', poiId: item.id })}
+                  accessibilityRole="button"
+                  accessibilityState={{ selected: isSelected }}
+                  accessibilityLabel={`${label}, ${poiLabel(item.kind)}`}
+                  className={`min-h-12 flex-row items-center gap-3 rounded-md border px-3 ${isSelected ? 'border-primary bg-primary-50' : 'border-border bg-background'}`}
+                >
+                  <Icon name={POI_KIND_META[item.kind].icon} size={20} color={colors.primary} />
+                  <View className="flex-1">
+                    <Text variant="label">{label}</Text>
+                    <Text variant="caption" tint="muted">
+                      {poiLabel(item.kind)}
+                    </Text>
+                  </View>
+                  {savedPois.some((saved) => saved.id === item.id) ? null : (
+                    <Text variant="caption" tint="warning">
+                      Não salvo
+                    </Text>
+                  )}
+                </Pressable>
+              );
+            })}
+          </View>
+        )}
+      </Card>
+
+      {poi ? (
+        <Card
+          title="Dados do ponto de interesse"
+          subtitle="Confira o nome e o tipo e toque em salvar para gravar o ícone no mapa."
+        >
+          <Input
+            label="Nome do ponto"
+            value={poiName}
+            onChangeText={(value) => {
+              setPoiName(value);
+              setPoiFeedback(null);
+            }}
+            placeholder={poiLabel(poiKind)}
+            autoCapitalize="sentences"
+            maxLength={120}
+            isOptional
+            testID="poi-name-input"
+          />
+
+          <View className="gap-2">
+            <Text variant="label">Tipo do ícone</Text>
+            <View className="flex-row flex-wrap gap-2">
+              {POI_KIND_ORDER.map((kindOption) => {
+                const selected = poiKind === kindOption;
+                return (
+                  <Pressable
+                    key={kindOption}
+                    onPress={() => {
+                      setPoiKind(kindOption);
+                      if (!poiName.trim() || poiName.trim() === poiLabel(poiKind)) {
+                        setPoiName(poiLabel(kindOption));
+                      }
+                      setPoiFeedback(null);
+                    }}
+                    accessibilityRole="button"
+                    accessibilityState={{ selected }}
+                    className={`min-h-11 flex-row items-center gap-1.5 rounded-md border px-3 ${selected ? 'border-primary bg-primary-50' : 'border-border bg-background'}`}
+                  >
+                    <Icon
+                      name={POI_KIND_META[kindOption].icon}
+                      size={16}
+                      color={selected ? colors.primary : colors.content}
+                    />
+                    <Text
+                      variant="caption"
+                      className={selected ? 'font-semibold text-primary' : undefined}
+                    >
+                      {poiLabel(kindOption)}
+                    </Text>
+                  </Pressable>
+                );
+              })}
+            </View>
+          </View>
+
+          <Input
+            label="Descrição"
+            value={poiDescription}
+            onChangeText={(value) => {
+              setPoiDescription(value);
+              setPoiFeedback(null);
+            }}
+            placeholder="Informação complementar sobre este ponto"
+            autoCapitalize="sentences"
+            multiline
+            maxLength={500}
+            isOptional
+            testID="poi-description-input"
+          />
+
+          {poiError ? (
+            <Alert tone="error" title="Não foi possível salvar" description={poiError} />
+          ) : null}
+          {poiFeedback ? (
+            <Alert tone="success" title="Ponto salvo" description={poiFeedback} />
+          ) : null}
+
+          <View className="gap-2">
+            <Button
+              label={
+                savedPois.some((saved) => saved.id === poi.id)
+                  ? 'Salvar alterações do ponto'
+                  : 'Salvar ponto'
+              }
+              loading={isSavingPoi}
+              loadingLabel="Salvando…"
+              disabled={!isPoiDirty}
+              onPress={() => void handleSavePoi()}
+              testID="save-poi"
+            />
+            <Button
+              label="Remover ponto"
+              variant="danger"
+              onPress={() => {
+                setPoiError(null);
+                setDeletePoiOpen(true);
+              }}
+              testID="delete-poi"
+            />
+          </View>
+        </Card>
+      ) : null}
 
       <Card title="Áreas cadastradas" subtitle="Selecione uma região para editar seus dados.">
         {state.areas.length === 0 ? (
@@ -420,12 +828,33 @@ function AreaEditor({
       >
         {error ? <Alert tone="error" title="Não foi possível remover" description={error} /> : null}
       </Dialog>
+
+      <Dialog
+        open={deletePoiOpen}
+        onClose={() => {
+          if (!isDeletingPoi) setDeletePoiOpen(false);
+        }}
+        icon="alert-outline"
+        title="Remover ponto de interesse?"
+        description={`${poi?.name?.trim() || (poi ? poiLabel(poi.kind) : 'Ponto')}. Esta ação não pode ser desfeita.`}
+        destructive
+        confirmLabel="Remover"
+        confirmLoading={isDeletingPoi}
+        onConfirm={() => void confirmDeletePoi()}
+      >
+        {poiError ? (
+          <Alert tone="error" title="Não foi possível remover" description={poiError} />
+        ) : null}
+      </Dialog>
     </>
   );
 }
 
-function toAreaDraft(area: Area): AreaDraft {
-  return {
+function buildInitialEditorSeed(
+  initialAreas: Area[],
+  initialPois: PointOfInterest[],
+): { areas: AreaDraft[]; pois: PoiDraft[] } {
+  const areas: AreaDraft[] = initialAreas.map((area) => ({
     id: area.id,
     kind: area.geometry.length === 4 ? 'rectangle' : 'freehand',
     geometry: area.geometry as AreaRing,
@@ -433,7 +862,25 @@ function toAreaDraft(area: Area): AreaDraft {
     type: area.type,
     description: area.description,
     poiId: null,
-  };
+  }));
+
+  const pois: PoiDraft[] = initialPois.map((item) => {
+    const matchingArea = topmostAreaAt(areas, item.position);
+    const areaId = matchingArea && !matchingArea.poiId ? matchingArea.id : '';
+    if (matchingArea && !matchingArea.poiId) {
+      matchingArea.poiId = item.id;
+    }
+    return {
+      id: item.id,
+      kind: poiTypeToKind(item.type, item.name),
+      position: item.position,
+      areaId,
+      name: item.name,
+      description: item.description,
+    };
+  });
+
+  return { areas, pois };
 }
 
 function areaTypeLabel(type: AreaType): string {

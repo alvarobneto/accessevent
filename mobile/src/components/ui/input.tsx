@@ -1,11 +1,71 @@
 import { useState, type ReactNode } from 'react';
-import { TextInput, View, type TextInputProps } from 'react-native';
+import { Pressable, ScrollView, TextInput, View, type TextInputProps } from 'react-native';
 
 import { colors } from '@/theme/tokens';
 
 import { tv, type VariantProps } from '../../lib/tv';
 
 import { Text } from './text';
+
+const PORTUGUESE_QUICK_ACCENTS = [
+  'á',
+  'à',
+  'â',
+  'ã',
+  'é',
+  'ê',
+  'í',
+  'ó',
+  'ô',
+  'õ',
+  'ú',
+  'ç',
+] as const;
+
+const DEAD_KEY_REPLACEMENTS: readonly (readonly [RegExp, string])[] = [
+  [/['´\[]a/g, 'á'],
+  [/['´\[]A/g, 'Á'],
+  [/[`{]a/g, 'à'],
+  [/[`{]A/g, 'À'],
+  [/[\^"]a/g, 'â'],
+  [/[\^"]A/g, 'Â'],
+  [/~a/g, 'ã'],
+  [/~A/g, 'Ã'],
+  [/['´\[]e/g, 'é'],
+  [/['´\[]E/g, 'É'],
+  [/[\^"]e/g, 'ê'],
+  [/[\^"]E/g, 'Ê'],
+  [/['´\[]i/g, 'í'],
+  [/['´\[]I/g, 'Í'],
+  [/['´\[]o/g, 'ó'],
+  [/['´\[]O/g, 'Ó'],
+  [/[\^"]o/g, 'ô'],
+  [/[\^"]O/g, 'Ô'],
+  [/~o/g, 'õ'],
+  [/~O/g, 'Õ'],
+  [/['´\[]u/g, 'ú'],
+  [/['´\[]U/g, 'Ú'],
+  [/['´,]c/g, 'ç'],
+  [/['´,]C/g, 'Ç'],
+  [/;a/g, 'ça'],
+  [/;A/g, 'Ça'],
+  [/;o/g, 'ço'],
+  [/;O/g, 'Ço'],
+  [/;u/g, 'çu'],
+  [/;U/g, 'Çu'],
+  [/;ã/g, 'çã'],
+  [/;Ã/g, 'ÇÃ'],
+  [/;õ/g, 'çõ'],
+  [/;Õ/g, 'ÇÕ'],
+];
+
+function composePortugueseAccents(input: string): string {
+  let result = input.normalize('NFC');
+  for (const [pattern, replacement] of DEAD_KEY_REPLACEMENTS) {
+    result = result.replace(pattern, replacement);
+  }
+  return result;
+}
 
 type FieldProps = {
   label: string;
@@ -48,13 +108,38 @@ export function Input({
   multiline,
   onFocus,
   onBlur,
+  onChangeText,
+  secureTextEntry,
+  keyboardType,
   value,
   disabled,
   ...props
 }: InputProps) {
   const [isFocused, setIsFocused] = useState(false);
+  const [internalValue, setInternalValue] = useState(value ?? '');
+  const currentValue = value !== undefined ? value : internalValue;
   const hasError = Boolean(errorText);
   const helper = hasError ? errorText : helperText;
+  const supportsPortugueseAccents =
+    !disabled &&
+    !secureTextEntry &&
+    keyboardType !== 'email-address' &&
+    keyboardType !== 'numeric' &&
+    keyboardType !== 'number-pad' &&
+    keyboardType !== 'decimal-pad' &&
+    keyboardType !== 'phone-pad';
+
+  const handleTextChange = (rawText: string) => {
+    const nextText = supportsPortugueseAccents ? composePortugueseAccents(rawText) : rawText;
+    setInternalValue(nextText);
+    onChangeText?.(nextText);
+  };
+
+  const handleInsertAccent = (accentChar: string) => {
+    const nextText = `${currentValue}${accentChar}`;
+    setInternalValue(nextText);
+    onChangeText?.(nextText);
+  };
 
   return (
     <View className={containerClassName ?? 'gap-2'}>
@@ -82,6 +167,9 @@ export function Input({
           selectionColor={colors.primary}
           value={value}
           multiline={multiline}
+          secureTextEntry={secureTextEntry}
+          keyboardType={keyboardType}
+          onChangeText={handleTextChange}
           onFocus={(event) => {
             setIsFocused(true);
             onFocus?.(event);
@@ -95,6 +183,29 @@ export function Input({
           {...props}
         />
       </View>
+
+      {isFocused && supportsPortugueseAccents ? (
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          keyboardShouldPersistTaps="always"
+          contentContainerStyle={{ gap: 6, paddingVertical: 2 }}
+        >
+          {PORTUGUESE_QUICK_ACCENTS.map((accentChar) => (
+            <Pressable
+              key={accentChar}
+              accessibilityRole="button"
+              accessibilityLabel={`Inserir ${accentChar}`}
+              onPressIn={() => {
+                handleInsertAccent(accentChar);
+              }}
+              className="h-8 min-w-8 items-center justify-center rounded-md border border-border bg-surface px-2.5 active:bg-primary/15"
+            >
+              <Text variant="label">{accentChar}</Text>
+            </Pressable>
+          ))}
+        </ScrollView>
+      ) : null}
 
       {helper ? (
         <Text variant="caption" tint={hasError ? 'danger' : 'muted'}>
