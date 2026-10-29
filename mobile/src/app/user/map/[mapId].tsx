@@ -12,6 +12,7 @@ import type { Area, Path, PointOfInterest } from '@/data/types';
 import { useAsyncData } from '@/hooks/useAsyncData';
 import { useMapGestureNavigation } from '@/hooks/useMapGestureNavigation';
 import { useRefreshOnFocus } from '@/hooks/useRefreshOnFocus';
+import { useUserLocation } from '@/hooks/useUserLocation';
 import { colors } from '@/theme/tokens';
 import { markersFromPois, polygonsFromAreas, polylinesFromPaths, rectsFromPois } from '@/utils/mapContent';
 
@@ -34,6 +35,9 @@ export default function UserMapScreen() {
   const { mapId } = useLocalSearchParams<{ mapId: string }>();
   const id = mapId ?? '';
   const mapGestures = useMapGestureNavigation();
+
+  const { userLocation, followUserLocation, isLoading, error, providerState, requestPermission, setFollowUserLocation } =
+    useUserLocation();
 
   const map = useAsyncData(() => repository.getNavigationMap(id), id);
   const savedPaths = useAsyncData(() => repository.listPaths(id), id);
@@ -136,6 +140,8 @@ export default function UserMapScreen() {
                         areas={polygonsFromAreas(areas)}
                         accessibilityLabel={mapAccessibilityLabel}
                         fitPadding={12}
+                        userLocation={userLocation ?? null}
+                        followUserLocation={followUserLocation}
                       />
                     )}
                   </View>
@@ -145,30 +151,61 @@ export default function UserMapScreen() {
                   </Text>
                 </View>
 
-                <Alert
-                  tone="info"
-                  title="Dados informados pelo organizador"
-                  description="As características de acessibilidade não são verificadas automaticamente. Confira a data da última atualização antes de seguir por um caminho."
-                />
-
-                <Card variant="soft">
-                  <View className="gap-2">
-                    <View className="flex-row items-center gap-2">
-                      <Icon name="human-wheelchair" size={20} color={colors.primary} />
-                      <Text variant="label">Rotas dentro do mapa</Text>
+                  {!providerState.servicesEnabled ? (
+                    <Alert tone="warning" title="Serviços de localização desabilitados" description="Ative os serviços de localização no aparelho para o mapa exibir sua posição." />
+                  ) : error ? (
+                    <Alert tone="error" title="Não foi possível ler a localização" description={error} />
+                  ) : providerState.permission !== 'granted' ? (
+                    <Alert
+                      tone="info"
+                      title="Localização desativada"
+                      description="Ative a localização no app para o mapa mostrar onde você está."
+                      action={
+                        <Button
+                          label="Ativar localização"
+                          variant="outline"
+                          onPress={() => requestPermission()}
+                        />
+                      }
+                    />
+                  ) : isLoading ? (
+                    <View className="items-center py-2">
+                      <ActivityIndicator color={colors.primary} />
+                      <Text variant="caption" tint="muted" className="mt-1">
+                        Lendo a localização…
+                      </Text>
                     </View>
-                    <Text variant="caption">
-                      Em breve você vai escolher um destino e informar suas restrições, como evitar
-                      escadas. O aplicativo calcula o caminho dentro do mapa.
-                    </Text>
-                  </View>
-                </Card>
+                  ) : userLocation ? (
+                    <View className="flex-row items-center gap-2 rounded-xl bg-primary/10 px-3 py-2">
+                      <Icon name="crosshairs-gps" size={20} color={colors.primary} />
+                      <Text variant="caption">Você está aqui</Text>
+                    </View>
+                  ) : null}
 
-                <Button
-                  label="Voltar às navegações"
-                  variant="ghost"
-                  onPress={() => router.back()}
-                />
+                  <Alert
+                    tone="info"
+                    title="Dados informados pelo organizador"
+                    description="As características de acessibilidade não são verificadas automaticamente. Confira a data da última atualização antes de seguir por um caminho."
+                  />
+
+                  <Card variant="soft">
+                    <View className="gap-2">
+                      <View className="flex-row items-center gap-2">
+                        <Icon name="human-wheelchair" size={20} color={colors.primary} />
+                        <Text variant="label">Rotas dentro do mapa</Text>
+                      </View>
+                      <Text variant="caption">
+                        Em breve você vai escolher um destino e informar suas restrições, como evitar
+                        escadas. O aplicativo calcula o caminho dentro do mapa.
+                      </Text>
+                    </View>
+                  </Card>
+
+                  <Button
+                    label="Voltar às navegações"
+                    variant="ghost"
+                    onPress={() => router.back()}
+                  />
               </>
             ) : (
               <EmptyState
