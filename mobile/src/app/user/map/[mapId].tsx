@@ -36,8 +36,7 @@ export default function UserMapScreen() {
   const id = mapId ?? '';
   const mapGestures = useMapGestureNavigation();
 
-  const { userLocation, followUserLocation, isLoading, error, providerState, requestPermission, setFollowUserLocation } =
-    useUserLocation();
+  const { userLocation, followUserLocation, isLoading, error, providerState, requestPermission } = useUserLocation();
 
   const map = useAsyncData(() => repository.getNavigationMap(id), id);
   const savedPaths = useAsyncData(() => repository.listPaths(id), id);

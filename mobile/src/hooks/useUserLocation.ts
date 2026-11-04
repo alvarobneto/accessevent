@@ -63,44 +63,54 @@ export function useUserLocation() {
     isPrecise: false,
   });
 
-  const requestPermission = async () => {
-    await requestLocationPermission();
-  };
-
   const startWatch = useCallback(async () => {
-    const permission = await requestLocationPermission();
-    setProviderState((previous) => previous);
-
-    if (permission.permission !== 'granted') {
-      setError('Permissão de localização negada. Ative nas configurações do aparelho.');
-      return;
-    }
-
-    if (!providerState.servicesEnabled) {
-      setError('Serviços de localização desabilitados. Ative no aparelho.');
-      return;
-    }
-
     let active = true;
     const stop = await watchPosition(
       (sample) => {
         if (!active) return;
         setUserLocation({ latitude: sample.latitude, longitude: sample.longitude, accuracy: sample.accuracy });
+        setIsLoading(false);
+        setError(null);
       },
       (reason) => {
         if (!active) return;
         setError(`Não foi possível acompanhar a localização: ${reason}`);
+        setIsLoading(false);
       },
     );
 
-    setIsLoading(true);
     return () => {
       active = false;
       stop();
       setIsLoading(false);
-      setError(null);
     };
-  }, [providerState.servicesEnabled]);
+  }, []);
+
+  const requestPermission = useCallback(async () => {
+    setIsLoading(true);
+    try {
+      const permission = await requestLocationPermission();
+      setProviderState(permission);
+
+      if (permission.permission !== 'granted') {
+        setError('Permissão de localização negada. Ative nas configurações do aparelho.');
+        setIsLoading(false);
+        return;
+      }
+
+      if (!permission.servicesEnabled) {
+        setError('Serviços de localização desabilitados. Ative no aparelho.');
+        setIsLoading(false);
+        return;
+      }
+
+      setError(null);
+      setFollowUserLocationState(true);
+    } catch {
+      setIsLoading(false);
+      setError('Não foi possível solicitar a permissão de localização. Tente novamente.');
+    }
+  }, []);
 
   const refreshLocation = useCallback(async () => {
     const permission = await getLocationPermissionStatus();
@@ -135,6 +145,22 @@ export function useUserLocation() {
   }, [followUserLocation]);
 
   useEffect(() => {
+    let active = true;
+
+    getLocationPermissionStatus()
+      .then((permission) => {
+        if (active) setProviderState(permission);
+      })
+      .catch(() => {
+        if (active) setError('Não foi possível verificar a disponibilidade da localização.');
+      });
+
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  useEffect(() => {
     if (!followUserLocation) {
       setUserLocation(null);
       setError(null);
@@ -145,21 +171,33 @@ export function useUserLocation() {
     let cleanup: (() => void) | undefined;
 
     (async () => {
-      const permission = await getLocationPermissionStatus();
-      setProviderState(permission);
+      try {
+        const permission = await getLocationPermissionStatus();
+        if (!mounted) return;
+        setProviderState(permission);
 
-      if (permission.permission !== 'granted') {
-        setError('Permissão de localização não concedida.');
-        return;
+        if (permission.permission !== 'granted') {
+          setError('Permissão de localização não concedida.');
+          return;
+        }
+
+        if (!permission.servicesEnabled) {
+          setError('Serviços de localização desabilitados. Ative no aparelho.');
+          return;
+        }
+
+        setIsLoading(true);
+        const stop = await startWatch();
+        if (!mounted) {
+          stop();
+          return;
+        }
+        cleanup = stop;
+      } catch {
+        if (!mounted) return;
+        setIsLoading(false);
+        setError('Não foi possível acompanhar a localização. Tente novamente.');
       }
-
-      if (!permission.servicesEnabled) {
-        setError('Serviços de localização desabilitados. Ative no aparelho.');
-        return;
-      }
-
-      if (mounted) setIsLoading(true);
-      cleanup = await startWatch();
     })();
 
     return () => {
