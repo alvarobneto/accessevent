@@ -16,7 +16,7 @@ import {
   type EventResponse,
 } from './event.response.js';
 
-/** Campos opcionais aceitam `''` (limpar) ou `null`; gravamos sempre `NULL`. */
+/** Remove espaços externos e converte texto vazio em `NULL`. */
 function normalizeOptionalText(
   value: string | null | undefined,
 ): string | null {
@@ -66,11 +66,15 @@ export class EventsService {
 
   async create(dto: CreateEventDto): Promise<EventResponse> {
     this.assertDateRange(dto.startDate, dto.endDate);
+    const address = normalizeOptionalText(dto.address);
+    if (!address) {
+      throw new BadRequestException('Informe o endereço do evento.');
+    }
 
     const event = this.events.create({
       name: dto.name.trim(),
       description: normalizeOptionalText(dto.description),
-      address: normalizeOptionalText(dto.address),
+      address,
       startDate: dto.startDate ?? null,
       endDate: dto.endDate ?? null,
       category: dto.category ?? null,
@@ -94,7 +98,11 @@ export class EventsService {
       event.description = normalizeOptionalText(dto.description);
     }
     if (dto.address !== undefined) {
-      event.address = normalizeOptionalText(dto.address);
+      const address = normalizeOptionalText(dto.address);
+      if (!address) {
+        throw new BadRequestException('Informe o endereço do evento.');
+      }
+      event.address = address;
     }
     if (dto.startDate !== undefined) event.startDate = dto.startDate;
     if (dto.endDate !== undefined) event.endDate = dto.endDate;

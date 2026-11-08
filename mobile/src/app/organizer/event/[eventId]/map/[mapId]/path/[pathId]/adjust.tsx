@@ -13,6 +13,8 @@ import {
   useMapGestureNavigation,
   type MapGestureTouchHandlers,
 } from '@/hooks/useMapGestureNavigation';
+import { resolveEventMapCenter } from '@/services/eventMapLocation';
+import type { Coordinate } from '@/types/coordinates';
 import type { MapGeometry, MapPolyline } from '@/types/map';
 import { toErrorMessage } from '@/utils/errors';
 import { formatDistance } from '@/utils/format';
@@ -42,7 +44,11 @@ import { pathLabels } from '@/utils/pathLabel';
  * gravou, sem verificação automática (PRD §19/§30).
  */
 export default function AdjustPathScreen() {
-  const { mapId, pathId } = useLocalSearchParams<{ mapId: string; pathId: string }>();
+  const { eventId, mapId, pathId } = useLocalSearchParams<{
+    eventId: string;
+    mapId: string;
+    pathId: string;
+  }>();
   const id = pathId ?? '';
   const navigationId = mapId ?? '';
 
@@ -55,13 +61,14 @@ export default function AdjustPathScreen() {
    * nasce uma vez, com tudo na mão.
    */
   const content = useAsyncData(async () => {
-    const [path, paths, pois] = await Promise.all([
+    const [path, paths, pois, initialCenter] = await Promise.all([
       repository.getPath(id),
       repository.listPaths(navigationId),
       repository.listPois(navigationId),
+      resolveEventMapCenter(eventId ?? ''),
     ]);
-    return { path, paths, pois };
-  }, `${navigationId}:${id}`);
+    return { path, paths, pois, initialCenter };
+  }, `${eventId ?? ''}:${navigationId}:${id}`);
   const mapGestures = useMapGestureNavigation();
 
   return (
@@ -74,13 +81,14 @@ export default function AdjustPathScreen() {
           onRetry={content.reload}
           loadingLabel="Carregando o trajeto…"
         >
-          {({ path, paths, pois }) =>
+          {({ path, paths, pois, initialCenter }) =>
             path ? (
               <AdjustPathEditor
                 key={path.id}
                 path={path}
                 paths={paths}
                 pois={pois}
+                initialCenter={initialCenter}
                 mapTouchHandlers={mapGestures.touchHandlers}
               />
             ) : (
@@ -115,10 +123,17 @@ type AdjustPathEditorProps = {
   path: Path;
   paths: readonly Path[];
   pois: readonly PointOfInterest[];
+  initialCenter: Coordinate;
   mapTouchHandlers: MapGestureTouchHandlers;
 };
 
-function AdjustPathEditor({ path, paths, pois, mapTouchHandlers }: AdjustPathEditorProps) {
+function AdjustPathEditor({
+  path,
+  paths,
+  pois,
+  initialCenter,
+  mapTouchHandlers,
+}: AdjustPathEditorProps) {
   /**
    * O trajeto salvo e o rascunho em edição, separados.
    *
@@ -214,6 +229,7 @@ function AdjustPathEditor({ path, paths, pois, mapTouchHandlers }: AdjustPathEdi
           polylines={polylines}
           markers={markers}
           rects={rects}
+          initialFocus={initialCenter}
           accessibilityLabel={`Mapa com o trajeto ${labels.title} aberto para ajuste`}
           testID="adjust-path-map"
         />

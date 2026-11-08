@@ -18,7 +18,9 @@ import { repository } from '@/data';
 import type { Area, AreaType, Path, PoiType, PointOfInterest } from '@/data/types';
 import { useAsyncData } from '@/hooks/useAsyncData';
 import { useMapGestureNavigation } from '@/hooks/useMapGestureNavigation';
+import { resolveEventMapCenter } from '@/services/eventMapLocation';
 import { colors } from '@/theme/tokens';
+import type { Coordinate } from '@/types/coordinates';
 import { topmostAreaAt, type AreaRing } from '@/utils/areaGeometry';
 import { toErrorMessage } from '@/utils/errors';
 import { CENTER_ANCHOR, rectFromCenter } from '@/utils/poiAnchor';
@@ -69,7 +71,12 @@ function poiTypeToKind(type: PoiType, name: string): PoiKind {
   return 'reception';
 }
 
-type AreaEditorData = { areas: Area[]; paths: Path[]; pois: PointOfInterest[] };
+type AreaEditorData = {
+  areas: Area[];
+  paths: Path[];
+  pois: PointOfInterest[];
+  initialCenter: Coordinate;
+};
 
 export default function EditAreasScreen() {
   const { eventId, mapId } = useLocalSearchParams<{ eventId: string; mapId: string }>();
@@ -77,13 +84,14 @@ export default function EditAreasScreen() {
   const mapGestures = useMapGestureNavigation();
   const [screenHeight, setScreenHeight] = useState(0);
   const data = useAsyncData(async (): Promise<AreaEditorData> => {
-    const [areas, paths, pois] = await Promise.all([
+    const [areas, paths, pois, initialCenter] = await Promise.all([
       repository.listAreas(id),
       repository.listPaths(id),
       repository.listPois(id),
+      resolveEventMapCenter(eventId ?? ''),
     ]);
-    return { areas, paths, pois };
-  }, id);
+    return { areas, paths, pois, initialCenter };
+  }, `${id}:${eventId ?? ''}`);
 
   return (
     <>
@@ -103,6 +111,7 @@ export default function EditAreasScreen() {
               initialAreas={loaded.areas}
               paths={loaded.paths}
               pois={loaded.pois}
+              initialCenter={loaded.initialCenter}
               touchHandlers={mapGestures.touchHandlers}
               screenHeight={screenHeight}
             />
@@ -119,6 +128,7 @@ type AreaEditorProps = {
   initialAreas: Area[];
   paths: Path[];
   pois: PointOfInterest[];
+  initialCenter: Coordinate;
   touchHandlers: ReturnType<typeof useMapGestureNavigation>['touchHandlers'];
   screenHeight: number;
 };
@@ -129,6 +139,7 @@ function AreaEditor({
   initialAreas,
   paths,
   pois,
+  initialCenter,
   touchHandlers,
   screenHeight,
 }: AreaEditorProps) {
@@ -508,6 +519,7 @@ function AreaEditor({
             state={state}
             dispatch={dispatch}
             context={context}
+            initialCenter={initialCenter}
             accessibilityLabel={`Editor de áreas. ${state.areas.length} áreas no mapa.`}
             testID="areas-map-canvas"
           />

@@ -281,9 +281,9 @@ Uma área será representada por um polígono.
 
 O organizador informa:
 
-* nome;
+* nome (obrigatório);
 * descrição;
-* endereço;
+* endereço (obrigatório; é usado como centro inicial dos mapas do evento);
 * data inicial;
 * data final;
 * imagem opcional.

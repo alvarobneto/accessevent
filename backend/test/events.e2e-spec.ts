@@ -76,9 +76,6 @@ function createRepositoryMock() {
   return { rows, repository };
 }
 
-/** Id do primeiro evento criado no teste, já que o mock gera ids determinísticos. */
-const FIRST_EVENT_ID = '33333333-3333-4333-8333-000000000001';
-
 describe('/events (e2e)', () => {
   let app: INestApplication<App>;
   let rows: EventRow[];
@@ -103,21 +100,24 @@ describe('/events (e2e)', () => {
     await app.close();
   });
 
-  it('cria um evento só com o nome e devolve 201', async () => {
-    const response = await request(app.getHttpServer())
+  it('rejeita criar evento sem endereço', async () => {
+    await request(app.getHttpServer())
       .post('/events')
       .send({ name: 'Feira de Tecnologia Acessível' })
-      .expect(201);
+      .expect(400)
+      .expect(({ body }) => {
+        expect(body.message).toContain('Informe o endereço do evento.');
+      });
+  });
 
-    expect(response.body).toMatchObject({
-      id: FIRST_EVENT_ID,
-      name: 'Feira de Tecnologia Acessível',
-      description: null,
-      address: null,
-      startDate: null,
-      endDate: null,
-    });
-    expect(response.body.createdAt).toBeDefined();
+  it('rejeita criar evento com endereço em branco', async () => {
+    await request(app.getHttpServer())
+      .post('/events')
+      .send({ name: 'Feira de Tecnologia Acessível', address: '   ' })
+      .expect(400)
+      .expect(({ body }) => {
+        expect(body.message).toContain('Informe o endereço do evento.');
+      });
   });
 
   it('cria um evento com endereço e datas', async () => {
@@ -142,11 +142,11 @@ describe('/events (e2e)', () => {
   it('lista os eventos em ordem alfabética', async () => {
     await request(app.getHttpServer())
       .post('/events')
-      .send({ name: 'Congresso Acessível' })
+      .send({ name: 'Congresso Acessível', address: 'Recife, PE' })
       .expect(201);
     await request(app.getHttpServer())
       .post('/events')
-      .send({ name: 'Feira de Tecnologia Acessível' })
+      .send({ name: 'Feira de Tecnologia Acessível', address: 'Recife, PE' })
       .expect(201);
 
     const response = await request(app.getHttpServer())
@@ -162,7 +162,7 @@ describe('/events (e2e)', () => {
   it('devolve 200 com o evento pedido e 404 quando ele não existe', async () => {
     const created = await request(app.getHttpServer())
       .post('/events')
-      .send({ name: 'Feira' })
+      .send({ name: 'Feira', address: 'Recife, PE' })
       .expect(201);
 
     await request(app.getHttpServer())
@@ -198,10 +198,27 @@ describe('/events (e2e)', () => {
     });
   });
 
+  it('não permite remover o endereço do evento', async () => {
+    const created = await request(app.getHttpServer())
+      .post('/events')
+      .send({ name: 'Feira', address: 'São Paulo, SP' })
+      .expect(201);
+
+    await request(app.getHttpServer())
+      .patch(`/events/${created.body.id}`)
+      .send({ address: '   ' })
+      .expect(400)
+      .expect(({ body }) => {
+        expect(body.message).toContain('Informe o endereço do evento.');
+      });
+
+    expect(rows[0]?.address).toBe('São Paulo, SP');
+  });
+
   it('limpa um campo opcional quando o patch envia string vazia', async () => {
     const created = await request(app.getHttpServer())
       .post('/events')
-      .send({ name: 'Feira', description: 'Pavilhões A e B' })
+      .send({ name: 'Feira', address: 'Recife, PE', description: 'Pavilhões A e B' })
       .expect(201);
 
     const response = await request(app.getHttpServer())
@@ -215,7 +232,7 @@ describe('/events (e2e)', () => {
   it('apaga um evento e devolve 204 sem corpo', async () => {
     const created = await request(app.getHttpServer())
       .post('/events')
-      .send({ name: 'Feira' })
+      .send({ name: 'Feira', address: 'Recife, PE' })
       .expect(201);
 
     const response = await request(app.getHttpServer())
@@ -229,11 +246,11 @@ describe('/events (e2e)', () => {
   it('deixa de listar o evento apagado', async () => {
     const kept = await request(app.getHttpServer())
       .post('/events')
-      .send({ name: 'Congresso Acessível' })
+      .send({ name: 'Congresso Acessível', address: 'Recife, PE' })
       .expect(201);
     const removed = await request(app.getHttpServer())
       .post('/events')
-      .send({ name: 'Feira' })
+      .send({ name: 'Feira', address: 'Recife, PE' })
       .expect(201);
 
     await request(app.getHttpServer())
@@ -272,7 +289,7 @@ describe('/events (e2e)', () => {
   it('rejeita evento sem nome com mensagem em pt-BR', async () => {
     await request(app.getHttpServer())
       .post('/events')
-      .send({ name: '' })
+      .send({ name: '', address: 'Recife, PE' })
       .expect(400)
       .expect(({ body }) => {
         expect(body.message).toEqual(['Informe o nome do evento.']);
@@ -282,7 +299,7 @@ describe('/events (e2e)', () => {
   it('rejeita nome só com espaços em vez de gravar um nome vazio', async () => {
     await request(app.getHttpServer())
       .post('/events')
-      .send({ name: '   ' })
+      .send({ name: '   ', address: 'Recife, PE' })
       .expect(400)
       .expect(({ body }) => {
         expect(body.message).toEqual(['Informe o nome do evento.']);
@@ -292,7 +309,7 @@ describe('/events (e2e)', () => {
   it('rejeita nome só com espaços no patch, que é opcional mas não vazio', async () => {
     const created = await request(app.getHttpServer())
       .post('/events')
-      .send({ name: 'Evento para patch' })
+      .send({ name: 'Evento para patch', address: 'Recife, PE' })
       .expect(201);
 
     await request(app.getHttpServer())
@@ -318,7 +335,7 @@ describe('/events (e2e)', () => {
   it('rejeita data fora do formato dd/mm/aaaa traduzido', async () => {
     await request(app.getHttpServer())
       .post('/events')
-      .send({ name: 'Feira', startDate: '05/10/2026' })
+      .send({ name: 'Feira', address: 'Recife, PE', startDate: '05/10/2026' })
       .expect(400)
       .expect(({ body }) => {
         expect(body.message).toEqual([
@@ -330,7 +347,12 @@ describe('/events (e2e)', () => {
   it('rejeita data final anterior à inicial', async () => {
     await request(app.getHttpServer())
       .post('/events')
-      .send({ name: 'Feira', startDate: '2026-10-08', endDate: '2026-10-05' })
+      .send({
+        name: 'Feira',
+        address: 'Recife, PE',
+        startDate: '2026-10-08',
+        endDate: '2026-10-05',
+      })
       .expect(400)
       .expect(({ body }) => {
         expect(body.message).toBe(
@@ -344,7 +366,7 @@ describe('/events (e2e)', () => {
   it('rejeita campos fora do contrato, como organizerId', async () => {
     const response = await request(app.getHttpServer())
       .post('/events')
-      .send({ name: 'Feira', organizerId: 'user-1' })
+      .send({ name: 'Feira', address: 'Recife, PE', organizerId: 'user-1' })
       .expect(400);
 
     // A tradução do campo desconhecido vem do pipe global, então vale para todo
@@ -359,11 +381,23 @@ describe('/events (e2e)', () => {
   it('rejeita nome acima de 120 caracteres', async () => {
     await request(app.getHttpServer())
       .post('/events')
-      .send({ name: 'a'.repeat(121) })
+      .send({ name: 'a'.repeat(121), address: 'Recife, PE' })
       .expect(400)
       .expect(({ body }) => {
         expect(body.message).toEqual([
           'O nome do evento deve ter no máximo 120 caracteres.',
+        ]);
+      });
+  });
+
+  it('rejeita endereço acima de 200 caracteres', async () => {
+    await request(app.getHttpServer())
+      .post('/events')
+      .send({ name: 'Feira', address: 'a'.repeat(201) })
+      .expect(400)
+      .expect(({ body }) => {
+        expect(body.message).toEqual([
+          'O endereço deve ter no máximo 200 caracteres.',
         ]);
       });
   });

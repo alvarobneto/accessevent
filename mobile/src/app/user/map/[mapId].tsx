@@ -1,5 +1,5 @@
 import { Stack, router, useLocalSearchParams } from 'expo-router';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef } from 'react';
 import { ActivityIndicator, View } from 'react-native';
 
 import { AsyncContent } from '@/components/async-content';
@@ -13,8 +13,8 @@ import { useAsyncData } from '@/hooks/useAsyncData';
 import { useMapGestureNavigation } from '@/hooks/useMapGestureNavigation';
 import { useRefreshOnFocus } from '@/hooks/useRefreshOnFocus';
 import { useUserLocation } from '@/hooks/useUserLocation';
+import { resolveEventMapCenter } from '@/services/eventMapLocation';
 import { colors } from '@/theme/tokens';
-import type { Coordinate } from '@/types/coordinates';
 import { markersFromPois, polygonsFromAreas, polylinesFromPaths, rectsFromPois } from '@/utils/mapContent';
 
 const NO_PATHS: readonly Path[] = [];
@@ -37,9 +37,8 @@ export default function UserMapScreen() {
   const id = mapId ?? '';
   const mapGestures = useMapGestureNavigation();
 
-  const { userLocation, followUserLocation, isLoading, error, providerState, requestPermission } = useUserLocation();
+  const { userLocation, isLoading, error, providerState, requestPermission } = useUserLocation();
   const permissionRequested = useRef(false);
-  const [cameraCenter, setCameraCenter] = useState<Coordinate | null>(null);
 
   useEffect(() => {
     if (permissionRequested.current) return;
@@ -48,6 +47,11 @@ export default function UserMapScreen() {
   }, [requestPermission]);
 
   const map = useAsyncData(() => repository.getNavigationMap(id), id);
+  const eventId = map.state.status === 'success' ? map.state.data?.eventId : undefined;
+  const eventCenter = useAsyncData(
+    () => (eventId ? resolveEventMapCenter(eventId) : Promise.resolve(null)),
+    eventId ?? '',
+  );
   const savedPaths = useAsyncData(() => repository.listPaths(id), id);
   const savedPois = useAsyncData(() => repository.listPois(id), id);
   const savedAreas = useAsyncData(() => repository.listAreas(id), id);
@@ -57,15 +61,12 @@ export default function UserMapScreen() {
     savedPaths.reload(showIndicator);
     savedPois.reload(showIndicator);
     savedAreas.reload(showIndicator);
+    if (eventId) eventCenter.reload(showIndicator);
   };
 
   useRefreshOnFocus(reload);
 
   const mapName = map.state.status === 'success' ? map.state.data?.name : null;
-  const position = useMemo<Coordinate | null>(
-    () => (userLocation ? [userLocation.latitude, userLocation.longitude] : null),
-    [userLocation],
-  );
   const paths = savedPaths.state.status === 'success' ? savedPaths.state.data : NO_PATHS;
   const pois = savedPois.state.status === 'success' ? savedPois.state.data : NO_POIS;
   const areas = savedAreas.state.status === 'success' ? savedAreas.state.data : NO_AREAS;
@@ -75,7 +76,8 @@ export default function UserMapScreen() {
   const isMapContentLoading =
     savedPaths.state.status === 'loading' ||
     savedPois.state.status === 'loading' ||
-    savedAreas.state.status === 'loading';
+    savedAreas.state.status === 'loading' ||
+    (eventId !== undefined && eventCenter.state.status === 'loading');
   const mapContentFailed =
     (savedPaths.state.status === 'error' || savedPois.state.status === 'error') &&
     paths.length === 0 &&
@@ -108,7 +110,13 @@ export default function UserMapScreen() {
       <Screen
         scrollable
         onRefresh={() => reload()}
-        refreshing={map.refreshing || savedPaths.refreshing || savedPois.refreshing || savedAreas.refreshing}
+        refreshing={
+          map.refreshing ||
+          savedPaths.refreshing ||
+          savedPois.refreshing ||
+          savedAreas.refreshing ||
+          eventCenter.refreshing
+        }
         testID="user-map-screen"
       >
         <AsyncContent state={map.state} onRetry={reload} loadingLabel="Carregando o mapa…">
@@ -143,21 +151,34 @@ export default function UserMapScreen() {
                           />
                         </EmptyState>
                       </View>
-                    ) : (
+                    ) : eventCenter.state.status === 'error' ? (
+                      <View className="h-full items-center justify-center rounded-lg border border-border bg-surface p-4">
+                        <EmptyState
+                          compact
+                          icon="map-marker-off-outline"
+                          title="Não foi possível localizar o endereço do evento"
+                          description={eventCenter.state.message}
+                        >
+                          <Button
+                            label="Tentar novamente"
+                            variant="outline"
+                            onPress={() => eventCenter.reload()}
+                          />
+                        </EmptyState>
+                      </View>
+                    ) : eventCenter.state.status === 'success' && eventCenter.state.data ? (
                       <EventMap
                         className="h-full rounded-lg border border-border"
                         markers={markers}
                         polylines={polylines}
                         rects={rects}
                         areas={polygonsFromAreas(areas)}
+                        initialFocus={eventCenter.state.data}
                         accessibilityLabel={mapAccessibilityLabel}
                         fitPadding={12}
                         userLocation={userLocation ?? null}
-                        followUserLocation={followUserLocation}
-                        cameraToFollow={cameraCenter ?? position}
-                        onCameraSettled={setCameraCenter}
                       />
-                    )}
+                    ) : null}
                   </View>
                   <Text variant="caption">
                     Os caminhos registrados pelo organizador e os pontos de interesse aparecem

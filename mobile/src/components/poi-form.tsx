@@ -64,6 +64,8 @@ type PoiFormProps = {
   /** Pontos já existentes, para dar contexto ao mapa onde a posição é escolhida. */
   contextMarkers?: MapMarker[];
   contextPolylines?: MapPolyline[];
+  /** Centro inicial do mapa, obtido do endereço do evento. */
+  initialFocus: Coordinate;
   submitLabel: string;
   submitLoadingLabel: string;
   mapTouchHandlers: MapGestureTouchHandlers;
@@ -126,6 +128,7 @@ export function PoiForm({
   poi,
   contextMarkers = [],
   contextPolylines = [],
+  initialFocus,
   submitLabel,
   submitLoadingLabel,
   mapTouchHandlers,
@@ -392,6 +395,7 @@ export function PoiForm({
             markers={markers}
             polylines={contextPolylines}
             rects={rects}
+            initialFocus={initialFocus}
             onMapPress={handleMapPress}
             accessibilityLabel={
               values.rect

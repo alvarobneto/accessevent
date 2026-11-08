@@ -7,6 +7,7 @@ import { Button, EmptyState } from '@/components/ui';
 import { repository } from '@/data';
 import { useAsyncData } from '@/hooks/useAsyncData';
 import { useMapGestureNavigation } from '@/hooks/useMapGestureNavigation';
+import { resolveEventMapCenter } from '@/services/eventMapLocation';
 import { markersFromPois, polylinesFromPaths } from '@/utils/mapContent';
 
 /**
@@ -16,24 +17,30 @@ import { markersFromPois, polylinesFromPaths } from '@/utils/mapContent';
  * porque a posição se escolhe em relação ao que já foi mapeado.
  */
 export default function EditPoiScreen() {
-  const { mapId, poiId } = useLocalSearchParams<{ mapId: string; poiId: string }>();
+  const { eventId, mapId, poiId } = useLocalSearchParams<{
+    eventId: string;
+    mapId: string;
+    poiId: string;
+  }>();
   const id = poiId ?? '';
   const map = mapId ?? '';
   const mapGestures = useMapGestureNavigation();
 
   const poi = useAsyncData(async () => {
-    const [point, pois, paths] = await Promise.all([
+    const [point, pois, paths, initialFocus] = await Promise.all([
       repository.getPoi(id),
       repository.listPois(map),
       repository.listPaths(map),
+      resolveEventMapCenter(eventId ?? ''),
     ]);
 
     return {
       point,
       markers: markersFromPois(pois),
       polylines: polylinesFromPaths(paths),
+      initialFocus,
     };
-  }, `${map}:${id}`);
+  }, `${eventId ?? ''}:${map}:${id}`);
 
   return (
     <>
@@ -62,6 +69,7 @@ export default function EditPoiScreen() {
                 poi={point}
                 contextMarkers={data.markers}
                 contextPolylines={data.polylines}
+                initialFocus={data.initialFocus}
                 submitLabel="Salvar alterações"
                 submitLoadingLabel="Salvando o ponto…"
                 mapTouchHandlers={mapGestures.touchHandlers}

@@ -1,13 +1,15 @@
 import { Stack, router, useLocalSearchParams } from 'expo-router';
 import { useCallback, useMemo, useState } from 'react';
-import { View } from 'react-native';
+import { ActivityIndicator, View } from 'react-native';
 
 import { EventMap } from '@/components/map';
 import { Screen } from '@/components/screen';
 import { Alert, Button, Card, EmptyState, Icon, Text } from '@/components/ui';
 import { repository } from '@/data';
+import { useAsyncData } from '@/hooks/useAsyncData';
 import { useMapGestureNavigation } from '@/hooks/useMapGestureNavigation';
 import { usePathRecording } from '@/hooks/usePathRecording';
+import { resolveEventMapCenter } from '@/services/eventMapLocation';
 import { colors } from '@/theme/tokens';
 import type { Coordinate } from '@/types/coordinates';
 import type { MapPolyline } from '@/types/map';
@@ -33,7 +35,11 @@ const MINIMUM_POINTS = 2;
  * vez de sumir com a gravação.
  */
 export default function RecordPathScreen() {
-  const { mapId } = useLocalSearchParams<{ eventId: string; mapId: string }>();
+  const { eventId, mapId } = useLocalSearchParams<{ eventId: string; mapId: string }>();
+  const eventCenter = useAsyncData(
+    () => resolveEventMapCenter(eventId ?? ''),
+    eventId ?? '',
+  );
   const mapGestures = useMapGestureNavigation();
   const recording = usePathRecording();
   const { status, geometry, distanceMeters, elapsedMs, discardedCount, signal, accuracy } =
@@ -51,10 +57,10 @@ export default function RecordPathScreen() {
   /**
    * Posição de quem grava, no formato de coordenada gravada.
    *
-   * Serve para duas coisas: dizer ao mapa de onde a câmera começa e servir de
-   * alvo de acompanhamento até o mapa reportar o próprio centro. Sem esse
-   * primeiro passo o laço de câmera só começaria depois de um gesto ou de um
-   * `onRegionChangeComplete` que nem todas as plataformas disparam sozinhas.
+   * O mapa começa no endereço do evento; quando a gravação inicia, esta posição
+   * passa a ser o alvo de acompanhamento até a câmera reportar o próprio centro.
+   * Sem esse primeiro alvo, o acompanhamento só começaria depois de um gesto ou
+   * de um `onRegionChangeComplete` que nem todas as plataformas disparam sozinhas.
    */
   const position = useMemo<Coordinate | null>(() => {
     const current = recording.currentPosition;
@@ -93,14 +99,34 @@ export default function RecordPathScreen() {
       />
 
       <Screen contentClassName="flex-1 gap-4 px-5 py-5" testID="record-path-screen">
-        {position ? (
+        {eventCenter.state.status === 'loading' ? (
+          <View className="flex-1 items-center justify-center gap-2">
+            <ActivityIndicator color={colors.primary} />
+            <Text variant="caption" tint="muted">
+              Localizando o endereço do evento…
+            </Text>
+          </View>
+        ) : eventCenter.state.status === 'error' ? (
+          <View className="flex-1 justify-center gap-3">
+            <Alert
+              tone="error"
+              title="Não foi possível localizar o endereço do evento"
+              description={eventCenter.state.message}
+            />
+            <Button
+              label="Tentar novamente"
+              variant="outline"
+              onPress={() => eventCenter.reload()}
+            />
+          </View>
+        ) : position ? (
           <View className="flex-1" {...mapGestures.touchHandlers}>
             <EventMap
               className="flex-1 rounded-lg border border-border"
               polylines={polylines}
               userLocation={recording.currentPosition}
               followUserLocation={isRecording}
-              initialFocus={position}
+              initialFocus={eventCenter.state.data}
               cameraToFollow={cameraCenter ?? position}
               onCameraSettled={setCameraCenter}
               accessibilityLabel="Mapa com o caminho em gravação"

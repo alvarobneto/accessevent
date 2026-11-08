@@ -16,7 +16,7 @@ import type {
 export type NewEvent = {
   name: string;
   description?: string | null;
-  address?: string | null;
+  address: string;
   /** `YYYY-MM-DD` ou `null`. */
   startDate?: string | null;
   endDate?: string | null;

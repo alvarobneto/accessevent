@@ -5,7 +5,7 @@ import { Screen } from '@/components/screen';
 import { Text } from '@/components/ui';
 import { repository } from '@/data';
 
-/** Criar evento: só o nome é obrigatório, o resto é opcional (PRD §9.1). */
+/** Criar evento: nome e endereço são obrigatórios para localizar os mapas. */
 export default function NewEventScreen() {
   return (
     <Screen scrollable testID="new-event-screen">

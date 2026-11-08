@@ -27,7 +27,7 @@ export type EventFormValues = {
 export type EventFormSubmission = {
   name: string;
   description: string;
-  address: string | null;
+  address: string;
   startDate: string | null;
   endDate: string | null;
   category: EventCategory | null;
@@ -88,7 +88,9 @@ export function EventForm({
       next.description = `A descrição deve ter no máximo ${DESCRIPTION_MAX_LENGTH} caracteres.`;
     }
 
-    if (values.address.trim().length > ADDRESS_MAX_LENGTH) {
+    if (!values.address.trim()) {
+      next.address = 'Informe o endereço do evento.';
+    } else if (values.address.trim().length > ADDRESS_MAX_LENGTH) {
       next.address = `O endereço deve ter no máximo ${ADDRESS_MAX_LENGTH} caracteres.`;
     }
 
@@ -116,7 +118,7 @@ export function EventForm({
       await onSubmit({
         name: values.name.trim(),
         description: values.description.trim(),
-        address: values.address.trim() || null,
+        address: values.address.trim(),
         startDate: values.startDate || null,
         endDate: values.endDate || null,
         category: values.category || null,
@@ -160,12 +162,12 @@ export function EventForm({
 
         <Input
           label="Endereço"
-          isOptional
           value={values.address}
           onChangeText={(value) => setField('address', value)}
           placeholder="Rua, número, cidade"
           autoCapitalize="words"
           returnKeyType="next"
+          helperText="Obrigatório. Os mapas do evento começam neste local."
           errorText={errors.address}
           testID="event-address"
         />

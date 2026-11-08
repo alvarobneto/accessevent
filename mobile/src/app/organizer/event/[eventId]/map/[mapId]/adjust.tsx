@@ -13,6 +13,7 @@ import {
   useMapGestureNavigation,
   type MapGestureTouchHandlers,
 } from '@/hooks/useMapGestureNavigation';
+import { resolveEventMapCenter } from '@/services/eventMapLocation';
 import { colors } from '@/theme/tokens';
 import type { Coordinate } from '@/types/coordinates';
 import type { MapGeometry, MapPolyline } from '@/types/map';
@@ -32,13 +33,17 @@ const PATH_TAP_TOLERANCE_M = 3;
  * um caminho; depois de salvar, ele pode tocar em outro e continuar no mesmo mapa.
  */
 export default function AdjustPathsScreen() {
-  const { mapId } = useLocalSearchParams<{ mapId: string }>();
+  const { eventId, mapId } = useLocalSearchParams<{ eventId: string; mapId: string }>();
   const id = mapId ?? '';
 
   const content = useAsyncData(async () => {
-    const [paths, pois] = await Promise.all([repository.listPaths(id), repository.listPois(id)]);
-    return { paths, pois };
-  }, id);
+    const [paths, pois, initialCenter] = await Promise.all([
+      repository.listPaths(id),
+      repository.listPois(id),
+      resolveEventMapCenter(eventId ?? ''),
+    ]);
+    return { paths, pois, initialCenter };
+  }, `${id}:${eventId ?? ''}`);
   const mapGestures = useMapGestureNavigation();
 
   return (
@@ -64,10 +69,11 @@ export default function AdjustPathsScreen() {
               </EmptyState>
             }
           >
-            {({ paths, pois }) => (
+            {({ paths, pois, initialCenter }) => (
               <AdjustPathsEditor
                 paths={paths}
                 pois={pois}
+                initialCenter={initialCenter}
                 mapTouchHandlers={mapGestures.touchHandlers}
               />
             )}
@@ -81,12 +87,14 @@ export default function AdjustPathsScreen() {
 type AdjustPathsEditorProps = {
   paths: readonly Path[];
   pois: readonly PointOfInterest[];
+  initialCenter: Coordinate;
   mapTouchHandlers: MapGestureTouchHandlers;
 };
 
 function AdjustPathsEditor({
   paths: initialPaths,
   pois,
+  initialCenter,
   mapTouchHandlers,
 }: AdjustPathsEditorProps) {
   const [paths, setPaths] = useState(initialPaths);
@@ -280,6 +288,7 @@ function AdjustPathsEditor({
           markers={markers}
           rects={rects}
           onMapPress={selectPathAtCoordinate}
+          initialFocus={initialCenter}
           accessibilityLabel={
             selectedPath && labels
               ? `Mapa com ${paths.length} caminhos. ${labels.title} está selecionado para ajuste.`

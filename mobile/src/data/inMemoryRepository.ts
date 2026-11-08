@@ -18,8 +18,8 @@ import type { Area, Event, EventCategoryCount, NavigationMap, Path, PointOfInter
  * O estado vive no escopo do módulo: sobrevive à navegação entre telas e é
  * descartado quando o app fecha. Serve para desenvolver e demonstrar a interface
  * sem a API no ar (`EXPO_PUBLIC_DATA_SOURCE=memory`), e espelha as mesmas
- * regras da implementação HTTP — inclusive os `null` dos campos opcionais, o
- * cálculo da distância e o `ON DELETE CASCADE` do banco.
+ * regras da implementação HTTP — inclusive o endereço obrigatório, os `null`
+ * dos campos opcionais, o cálculo da distância e o `ON DELETE CASCADE` do banco.
  */
 export function createInMemoryRepository(): AppRepository {
   const events: Event[] = [];
@@ -58,12 +58,15 @@ export function createInMemoryRepository(): AppRepository {
     },
 
     async createEvent({ name, description, address, startDate, endDate, category }: NewEvent) {
+      const normalizedAddress = clean(address);
+      if (!normalizedAddress) throw new Error('Informe o endereço do evento.');
+
       const timestamp = now();
       const event: Event = {
         id: nextId('evento'),
         name: name.trim(),
         description: clean(description),
-        address: clean(address),
+        address: normalizedAddress,
         startDate: startDate ?? null,
         endDate: endDate ?? null,
         category: category ?? null,
@@ -89,7 +92,11 @@ export function createInMemoryRepository(): AppRepository {
       if (changes.description !== undefined) {
         event.description = clean(changes.description);
       }
-      if (changes.address !== undefined) event.address = clean(changes.address);
+      if (changes.address !== undefined) {
+        const address = clean(changes.address);
+        if (!address) throw new Error('Informe o endereço do evento.');
+        event.address = address;
+      }
       if (changes.startDate !== undefined) event.startDate = changes.startDate;
       if (changes.endDate !== undefined) event.endDate = changes.endDate;
       if (changes.category !== undefined) event.category = changes.category;

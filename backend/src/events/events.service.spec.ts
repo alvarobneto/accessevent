@@ -135,27 +135,37 @@ describe('EventsService (unit)', () => {
     });
   });
 
-  it('trims the name and stores empty optional texts as null on create', async () => {
+  it('trims the name and address and stores empty optional texts as null on create', async () => {
     await service.create({
       name: '  Feira  ',
       description: '   ',
-      address: '',
+      address: ' Recife, PE ',
     });
 
     expect(create).toHaveBeenCalledWith({
       name: 'Feira',
       description: null,
-      address: null,
+      address: 'Recife, PE',
       startDate: null,
       endDate: null,
       category: null,
     });
   });
 
+  it('rejects a create with an empty address', async () => {
+    await expect(service.create({ name: 'Feira', address: '   ' })).rejects.toMatchObject({
+      status: 400,
+      message: 'Informe o endereço do evento.',
+    });
+
+    expect(create).not.toHaveBeenCalled();
+  });
+
   it('rejects a create whose end date precedes the start date', async () => {
     await expect(
       service.create({
         name: 'Feira',
+        address: 'Recife, PE',
         startDate: '2026-10-08',
         endDate: '2026-10-05',
       }),
@@ -177,13 +187,15 @@ describe('EventsService (unit)', () => {
     expect(saved?.address).toBe('São Paulo, SP');
   });
 
-  it('clears an optional field when the body sends an empty string', async () => {
+  it('does not allow clearing the event address', async () => {
     findOne.mockResolvedValue(makeRow({ address: 'São Paulo, SP' }));
 
-    await service.update('event-1', { address: '   ' });
+    await expect(service.update('event-1', { address: '   ' })).rejects.toMatchObject({
+      status: 400,
+      message: 'Informe o endereço do evento.',
+    });
 
-    const [saved] = save.mock.calls[0] ?? [];
-    expect(saved?.address).toBeNull();
+    expect(save).not.toHaveBeenCalled();
   });
 
   it('validates the date range against the stored value when only one date is sent', async () => {

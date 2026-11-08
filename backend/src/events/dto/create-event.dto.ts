@@ -16,9 +16,8 @@ export const DATE_ONLY_MESSAGE =
   'Informe a data no formato dd/mm/aaaa. Exemplo: 05/10/2026.';
 
 /**
- * Corpo do `POST /events`. Só o nome é obrigatório; o resto é opcional e pode
- * chegar como `null` para limpar o valor. `UpdateEventDto` deriva deste com
- * `PartialType`, então as duas listas de campos não podem divergir.
+ * Corpo do `POST /events`. Nome e endereço são obrigatórios; os demais campos
+ * são opcionais. `UpdateEventDto` deriva deste com `PartialType`.
  */
 export class CreateEventDto {
   @IsString({ message: 'O nome do evento deve ser um texto.' })
@@ -35,10 +34,10 @@ export class CreateEventDto {
   })
   description?: string | null;
 
-  @IsOptional()
   @IsString({ message: 'O endereço deve ser um texto.' })
+  @Matches(/\S/, { message: 'Informe o endereço do evento.' })
   @MaxLength(200, { message: 'O endereço deve ter no máximo 200 caracteres.' })
-  address?: string | null;
+  address!: string;
 
   @IsOptional()
   @Matches(DATE_ONLY_PATTERN, { message: DATE_ONLY_MESSAGE })

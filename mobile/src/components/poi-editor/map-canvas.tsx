@@ -155,6 +155,8 @@ export type MapCanvasContext = {
 export type MapCanvasProps = {
   state: PoiEditorState;
   dispatch: (action: PoiEditorAction) => void;
+  /** Centro inicial do desenho, correspondente ao endereço do evento. */
+  initialCenter?: Coordinate;
   /**
    * O tamanho do canvas — `h-72` como as outras telas, `w-full`. O conteúdo
    * absoluto (SVG, marcadores, alças) assume `position: relative` no contêiner.
@@ -203,12 +205,12 @@ export type MapCanvasHandle = {
  * movimento dele vira `pan`. Sem medir a janela, no mesmo desenho dos filhos.
  */
 export const MapCanvas = forwardRef<MapCanvasHandle, MapCanvasProps>(function MapCanvas(
-  { state, dispatch, className, accessibilityLabel, context, testID },
+  { state, dispatch, className, accessibilityLabel, context, initialCenter, testID },
   ref,
 ) {
   const [size, setSize] = useState<ViewportSize>({ width: 0, height: 0 });
   const [viewport, setViewport] = useState<MapViewport>({
-    center: [...INITIAL_CENTER],
+    center: [...(initialCenter ?? INITIAL_CENTER)],
     latitudeDelta: INITIAL_LATITUDE_DELTA,
     longitudeDelta: INITIAL_LATITUDE_DELTA,
   });
@@ -278,17 +280,19 @@ export const MapCanvas = forwardRef<MapCanvasHandle, MapCanvasProps>(function Ma
     setViewport(nextViewport);
   };
 
-  // Enquadra a primeira coisa que dá enquadramento: o contexto da navegação
-  // (caminhos/pontos já mapeados) quando ele chega, ou o primeiro cômodo quando o
-  // desenho começa antes do contexto. Sem isso quem abre uma navegação já mapeada
-  // veria o ponto inicial do pavilhão em vez do que existe. Depois da primeira
+  // Sem endereço inicial, enquadra o contexto já mapeado ou o primeiro cômodo.
+  // Com endereço inicial, preserva esse centro na abertura. Depois da primeira
   // vez, quem enquadra é o botão Centralizar — um contexto recarregado no foco não
   // tira a câmera da mão de quem está desenhando.
   const hasFitted = useRef(false);
   useEffect(() => {
     if (hasFitted.current) return;
+    if (initialCenter && size.width > 0 && size.height > 0) {
+      hasFitted.current = true;
+      return;
+    }
     if (fitToAreas()) hasFitted.current = true;
-  }, [context, size, state.areas.length, fitToAreas]);
+  }, [context, initialCenter, size, state.areas.length, fitToAreas]);
 
   const handleTap = (local: ScreenPoint, frame: ViewportSize, vp: MapViewport) => {
     const st = stateRef.current;

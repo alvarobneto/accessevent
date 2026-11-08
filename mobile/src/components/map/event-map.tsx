@@ -237,8 +237,8 @@ export type EventMapProps = {
   /** Notifica o centro do enquadramento quando a câmera para de se mexer. */
   onCameraSettled?: (center: Coordinate) => void;
   /**
-   * Ponto de onde a câmera começa, para quando o mapa abre sem conteúdo para
-   * enquadrar — a gravação de caminho, que ainda não tem trajeto.
+   * Centro inicial da câmera. Quando informado, o mapa começa nesse ponto mesmo
+   * que já tenha conteúdo; o enquadramento automático fica disponível depois.
    *
    * Usa a mesma fórmula do acompanhamento, e é a tela que passa o ponto para não
    * duplicar `regionForCoordinate` fora daqui.
@@ -305,10 +305,10 @@ function UnavailableMap({ className, testID }: Pick<EventMapProps, 'className' |
  * O mapa propriamente dito, separado do `EventMap` para que a guarda do provedor
  * seja uma fronteira de componente e não um retorno no meio do corpo.
  *
- * Enquadramento: o mapa abre mostrando todo o conteúdo e reenquadra quando o
- * conjunto muda, nunca a cada render. Com o mapa vazio, quem mostra a câmera é a
- * tela, não o componente: um `initialRegion` explícito, a localização de quem
- * está usando o app ou o `followUserLocation` da gravação.
+ * Enquadramento: o mapa abre no foco inicial informado pela tela, se houver;
+ * sem foco, mostra todo o conteúdo. Depois reenquadra quando o conjunto muda,
+ * nunca a cada render. O `initialRegion` explícito também é semeado pela tela
+ * quando o conteúdo ainda não localiza o mapa.
  *
  * **Quem dirige a câmera.** São dois jeitos e eles não convivem. Por padrão o
  * componente reenquadra o conteúdo, o que serve para um mapa salvo. Durante a
@@ -436,6 +436,7 @@ const DrawnMap = forwardRef<EventMapHandle, EventMapProps>(function DrawnMap(
   );
   const pathHandleSelections = useRef(new Map<string, PathHandleSelection>());
   const lastCameraFocusedPathId = useRef<string | null>(null);
+  const initialFocusApplied = useRef(false);
   const pathProjectionFrame = useRef<number | null>(null);
   const pathProjectionSequence = useRef(0);
 
@@ -560,6 +561,13 @@ const DrawnMap = forwardRef<EventMapHandle, EventMapProps>(function DrawnMap(
     const map = mapRef.current;
     if (!isReady || !hasLayout || !map || isCameraDriven) return;
 
+    // O centro inicial do evento prevalece na abertura; o próximo reenquadramento
+    // automático volta a seguir o conteúdo alterado no mapa.
+    if (initialFocus && !initialFocusApplied.current) {
+      initialFocusApplied.current = true;
+      return;
+    }
+
     const { width, height } = size.current;
     const aspect = width / height;
     const availableWidth = Math.max(width - fitPadding * 2, 1);
@@ -662,6 +670,7 @@ const DrawnMap = forwardRef<EventMapHandle, EventMapProps>(function DrawnMap(
     initialFocusLongitude,
     isReady,
     isCameraDriven,
+    initialFocus,
     scheduleAndroidViewport,
   ]);
 
