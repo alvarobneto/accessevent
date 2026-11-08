@@ -1,5 +1,5 @@
 import { Stack, router, useLocalSearchParams } from 'expo-router';
-import { useMemo } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, View } from 'react-native';
 
 import { AsyncContent } from '@/components/async-content';
@@ -14,6 +14,7 @@ import { useMapGestureNavigation } from '@/hooks/useMapGestureNavigation';
 import { useRefreshOnFocus } from '@/hooks/useRefreshOnFocus';
 import { useUserLocation } from '@/hooks/useUserLocation';
 import { colors } from '@/theme/tokens';
+import type { Coordinate } from '@/types/coordinates';
 import { markersFromPois, polygonsFromAreas, polylinesFromPaths, rectsFromPois } from '@/utils/mapContent';
 
 const NO_PATHS: readonly Path[] = [];
@@ -37,6 +38,14 @@ export default function UserMapScreen() {
   const mapGestures = useMapGestureNavigation();
 
   const { userLocation, followUserLocation, isLoading, error, providerState, requestPermission } = useUserLocation();
+  const permissionRequested = useRef(false);
+  const [cameraCenter, setCameraCenter] = useState<Coordinate | null>(null);
+
+  useEffect(() => {
+    if (permissionRequested.current) return;
+    permissionRequested.current = true;
+    void requestPermission();
+  }, [requestPermission]);
 
   const map = useAsyncData(() => repository.getNavigationMap(id), id);
   const savedPaths = useAsyncData(() => repository.listPaths(id), id);
@@ -53,6 +62,10 @@ export default function UserMapScreen() {
   useRefreshOnFocus(reload);
 
   const mapName = map.state.status === 'success' ? map.state.data?.name : null;
+  const position = useMemo<Coordinate | null>(
+    () => (userLocation ? [userLocation.latitude, userLocation.longitude] : null),
+    [userLocation],
+  );
   const paths = savedPaths.state.status === 'success' ? savedPaths.state.data : NO_PATHS;
   const pois = savedPois.state.status === 'success' ? savedPois.state.data : NO_POIS;
   const areas = savedAreas.state.status === 'success' ? savedAreas.state.data : NO_AREAS;
@@ -141,6 +154,8 @@ export default function UserMapScreen() {
                         fitPadding={12}
                         userLocation={userLocation ?? null}
                         followUserLocation={followUserLocation}
+                        cameraToFollow={cameraCenter ?? position}
+                        onCameraSettled={setCameraCenter}
                       />
                     )}
                   </View>
@@ -150,30 +165,30 @@ export default function UserMapScreen() {
                   </Text>
                 </View>
 
-                  {!providerState.servicesEnabled ? (
-                    <Alert tone="warning" title="Serviços de localização desabilitados" description="Ative os serviços de localização no aparelho para o mapa exibir sua posição." />
-                  ) : error ? (
-                    <Alert tone="error" title="Não foi possível ler a localização" description={error} />
-                  ) : providerState.permission !== 'granted' ? (
-                    <Alert
-                      tone="info"
-                      title="Localização desativada"
-                      description="Ative a localização no app para o mapa mostrar onde você está."
-                      action={
-                        <Button
-                          label="Ativar localização"
-                          variant="outline"
-                          onPress={() => requestPermission()}
-                        />
-                      }
-                    />
-                  ) : isLoading ? (
+                  {isLoading ? (
                     <View className="items-center py-2">
                       <ActivityIndicator color={colors.primary} />
                       <Text variant="caption" tint="muted" className="mt-1">
                         Lendo a localização…
                       </Text>
                     </View>
+                  ) : !providerState.servicesEnabled ? (
+                    <Alert tone="warning" title="Serviços de localização desabilitados" description="Ative os serviços de localização no aparelho para o mapa exibir sua posição." />
+                  ) : providerState.permission !== 'granted' ? (
+                    <Alert
+                      tone={error ? 'error' : 'info'}
+                      title="Localização desativada"
+                      description={error ?? 'Ative a localização no app para o mapa mostrar onde você está.'}
+                      action={
+                        <Button
+                          label="Permitir localização"
+                          variant="outline"
+                          onPress={() => requestPermission()}
+                        />
+                      }
+                    />
+                  ) : error ? (
+                    <Alert tone="error" title="Não foi possível ler a localização" description={error} />
                   ) : userLocation ? (
                     <View className="flex-row items-center gap-2 rounded-xl bg-primary/10 px-3 py-2">
                       <Icon name="crosshairs-gps" size={20} color={colors.primary} />
